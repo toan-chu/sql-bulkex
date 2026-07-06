@@ -1,0 +1,53 @@
+templates:
+  mst_short_columns:
+    label: "Tra MST - bộ cột rút gọn"
+    type: select
+    database: my_db
+    schema: public
+    tables: "x_y{year}_{month}"
+    columns:
+      - so_to_khai
+      - ngay_dang_ky
+      - ma_nguoi_xuat_khau
+      - ten_nguoi_xuat_khau
+      - ma_nguoi_nhap_khau
+      - ten_nguoi_nhap_khau
+      - ma_so_hang_hoa
+      - mo_ta_hang_hoa
+      - ma_dia_diem_xep_hang
+      - ma_dia_diem_dich
+      - ma_phuong_thuc_van_chuyen
+      - tri_gia_usd
+      - luong
+      - don_vi_tinh
+      - nuoc_xuat_xu
+    merge: union
+    filters:
+      - column: ma_nguoi_xuat_khau
+        type: prefix
+        label: "MST người xuất khẩu (10 hoặc 13 số, nhiều mã cách phẩy)"
+        required: true
+    split: null
+
+  mst_transport_hs:
+    label: "Tra MST + phương thức vận chuyển + HS"
+    type: select
+    database: my_db
+    schema: public
+    tables: "x_y{year}_{month}"
+    columns: ALL
+    merge: union
+    filters:
+      - column: ma_nguoi_xuat_khau
+        type: prefix
+        label: "MST người xuất khẩu"
+        required: true
+      - column: ma_phuong_thuc_van_chuyen
+        type: eq
+        label: "Phương thức vận chuyển"
+        required: true
+      - column: ma_so_hang_hoa
+        type: prefix
+        label: "Mã HS"
+        required: true
+    split: null

@@ -1,0 +1,13 @@
+jobs.yaml
+.password
+log/*
+!log/.gitkeep
+__pycache__/
+*.pyc
+exports/
+.pytest_cache/
+.agents/
+.codex/
+AGENTS.md
+handoff/
+docs/*.docx

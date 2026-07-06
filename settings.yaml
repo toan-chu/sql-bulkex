@@ -1,0 +1,6 @@
+input_dir: "requests"
+output_dir: "exports"
+poll_seconds: 120
+filename_pattern: "{ts}_{user}_{request}"
+max_rows_auto: 300000
+max_rows_hard: 3000000

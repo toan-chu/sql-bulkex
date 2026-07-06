@@ -1,0 +1,19 @@
+# SQL BulkEx connection config.
+# Edit this file on the machine that can access PostgreSQL.
+host: localhost
+port: 5432
+user: postgres
+password: ""
+
+# Database used only to list available databases in the interactive portal.
+maintenance_db: postgres
+
+# Optional default database shown in the portal.
+default_database:
+
+# Optional output folder for portal.py exports. Runner output uses settings.yaml.
+output_dir: exports
+
+# Optional format for: python portal.py --job <name>
+# Allowed: xlsx or csv
+job_export_format: xlsx
