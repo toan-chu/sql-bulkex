@@ -16,6 +16,8 @@ import psycopg2
 from psycopg2 import sql
 import yaml
 from openpyxl import Workbook, load_workbook
+from openpyxl.formatting.rule import FormulaRule
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 
 import portal
@@ -23,38 +25,45 @@ import portal
 
 BASE_DIR = Path(__file__).resolve().parent
 SETTINGS_FILE = BASE_DIR / "settings.yaml"
-TEMPLATES_FILE = BASE_DIR / "templates.yaml"
+COLUMN_FILE = BASE_DIR / "column.yaml"
 REQUEST_TEMPLATE_FILE = BASE_DIR / "request_template.xlsx"
 LOG_DIR = BASE_DIR / "log"
 TMP_DIR = LOG_DIR / "tmp"
 RUNNER_LOG_FILE = LOG_DIR / "runner.log"
 XLSX_ROW_LIMIT = 1_000_000
-
-REQUEST_LABELS = [
+REJECT_PREFIX = "[LOI]_"
+VALID_OPS = {"eq", "in", "prefix", "contains", "between"}
+REQUEST_V5_LABELS_ORDER = [
     "Người yêu cầu",
-    "Loại request",
+    "Bảng",
     "Năm",
     "Tháng",
-    "Giá trị 1",
-    "Giá trị 2",
-    "Giá trị 3",
-    "Cột cần lấy",
     "Tách file theo",
-    "Xác nhận dữ liệu lớn",
+    "Xác nhận lớn",
     "Ghi chú / tên request",
 ]
-
-KEY_BY_LABEL = {
+COLUMN_SCAN_SKELETON = {
+    "datasets": {
+        "export": {
+            "database": "",
+            "schema": "",
+            "tables": "",
+            "columns": [],
+        }
+    },
+    "operator_defaults": {},
+}
+COLUMN_SETUP_MESSAGE = (
+    "Chưa điền datasets trong column.yaml. "
+    "Vui lòng điền database/schema/tables rồi chạy lại."
+)
+REQUEST_V5_LABELS = {
     "Người yêu cầu": "user",
-    "Loại request": "request_type",
+    "Bảng": "bang",
     "Năm": "year",
     "Tháng": "month",
-    "Giá trị 1": "value_1",
-    "Giá trị 2": "value_2",
-    "Giá trị 3": "value_3",
-    "Cột cần lấy": "columns",
     "Tách file theo": "split",
-    "Xác nhận dữ liệu lớn": "large_confirm",
+    "Xác nhận lớn": "large_confirm",
     "Ghi chú / tên request": "request_name",
 }
 
@@ -106,21 +115,35 @@ def load_settings(path=SETTINGS_FILE):
     return load_yaml_file(path, DEFAULT_SETTINGS)
 
 
-def load_templates(path=TEMPLATES_FILE):
+def write_yaml_file(path, data):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+
+
+def create_column_skeleton(path=None):
+    path = path or COLUMN_FILE
+    write_yaml_file(path, COLUMN_SCAN_SKELETON)
+    return Path(path)
+
+
+def load_column_config(path=None):
+    path = path or COLUMN_FILE
     data = load_yaml_file(path, {})
-    return data.get("templates", {}) if isinstance(data, dict) else {}
-
-
-def validate_templates(templates):
-    warnings = []
-    required = {"label", "type", "database", "schema", "tables", "columns", "filters"}
-    for name, template in templates.items():
-        missing = sorted(required - set(template or {}))
-        if missing:
-            warnings.append(f"Template {name} thiếu trường: {', '.join(missing)}")
-        if template.get("type", "select") not in TYPE_BUILDERS:
-            warnings.append(f"Template {name} có type chưa hỗ trợ: {template.get('type')}")
-    return warnings
+    datasets = data.get("datasets") or {}
+    if not datasets:
+        raise RunnerConfigError("column.yaml chưa có datasets. Chạy: python runner.py --scan-columns")
+    for name, dataset in datasets.items():
+        for key in ("database", "schema", "tables", "columns"):
+            if not dataset.get(key):
+                raise RunnerConfigError(f"Dataset {name} thiếu field: {key}")
+    op_defaults = data.get("operator_defaults") or {}
+    valid_ops = {"eq", "in", "prefix", "contains", "between"}
+    for column, op in op_defaults.items():
+        if op not in valid_ops:
+            raise RunnerConfigError(f"operator_defaults.{column} không hợp lệ: {op}")
+    return data
 
 
 def load_connection_config():
@@ -141,34 +164,119 @@ def cell_text(value):
     return str(value).strip()
 
 
-def parse_request_xlsx(path):
+def parse_sheet_request(sheet):
+    values = {}
+    for row in sheet.iter_rows(min_row=1, max_col=2, values_only=True):
+        label = cell_text(row[0])
+        if not label:
+            continue
+        key = REQUEST_V5_LABELS.get(label)
+        if key:
+            values[key] = cell_text(row[1])
+    return values
+
+
+def validate_op_value(col, op, val):
+    parts = [part.strip() for part in cell_text(val).split(",") if part.strip()]
+    if op == "eq":
+        if len(parts) != 1:
+            raise RequestError(f"Cột {col}: toán tử eq cần đúng 1 giá trị, có {len(parts)}.")
+    elif op == "between":
+        if len(parts) != 2:
+            raise RequestError(
+                f"Cột {col}: toán tử between cần đúng 2 giá trị cách dấu phẩy, có {len(parts)}."
+            )
+    elif op == "contains":
+        if len(parts) != 1:
+            raise RequestError(f"Cột {col}: toán tử contains cần 1 chuỗi, có {len(parts)}.")
+    elif op in ("in", "prefix"):
+        if len(parts) < 1:
+            raise RequestError(f"Cột {col}: toán tử {op} cần ≥1 giá trị.")
+
+
+def parse_column_sheet(sheet, valid_cols, op_defaults):
+    valid_cols = set(valid_cols)
+    op_defaults = op_defaults or {}
+    filters = []
+    select_cols = []
+    warnings = []
+
+    for row in sheet.iter_rows(min_row=2, max_col=4, values_only=True):
+        col, op, val, out = [cell_text(cell) for cell in row]
+        if not col:
+            continue
+        if col not in valid_cols:
+            warnings.append(f"Cột không hợp lệ trong sheet: {col}")
+            continue
+
+        op = op.lower() if op else ""
+        out = out.upper() if out else ""
+        has_op = op in VALID_OPS
+        has_val = bool(val)
+
+        if op and not has_op:
+            valid = ", ".join(sorted(VALID_OPS))
+            raise RequestError(f"Cột {col}: toán tử không hợp lệ '{op}'. Chỉ chấp nhận: {valid}")
+
+        if has_op and has_val:
+            validate_op_value(col, op, val)
+            filters.append({"col": col, "op": op, "val": val})
+            if col not in select_cols:
+                select_cols.append(col)
+        elif has_op and not has_val:
+            raise RequestError(f"Cột {col}: có toán tử '{op}' nhưng thiếu Giá trị.")
+        elif not has_op and has_val:
+            default_op = op_defaults.get(col)
+            if default_op and default_op in VALID_OPS:
+                validate_op_value(col, default_op, val)
+                filters.append({"col": col, "op": default_op, "val": val})
+                if col not in select_cols:
+                    select_cols.append(col)
+                warnings.append(f"Cột {col}: auto {default_op} (user không chọn toán tử)")
+            else:
+                warnings.append(
+                    f"Cột {col}: có Giá trị nhưng thiếu Toán tử và không có default. Giá trị bỏ qua."
+                )
+        elif out == "YES" and col not in select_cols:
+            select_cols.append(col)
+
+    return filters, select_cols, warnings
+
+
+def parse_request_v5(path, column_cfg):
     wb = load_workbook(path, data_only=True, read_only=True)
     try:
-        ws = wb.active
-        values = {}
-        for row in ws.iter_rows(min_row=1, max_col=2, values_only=True):
-            label = cell_text(row[0])
-            if not label:
-                continue
-            key = KEY_BY_LABEL.get(label)
-            if key:
-                values[key] = cell_text(row[1])
-        return values
+        if "Request" not in wb.sheetnames:
+            raise RequestError("Thiếu sheet Request.")
+        req = parse_sheet_request(wb["Request"])
+        dataset_name = cell_text(req.get("bang")).lower()
+        datasets = column_cfg.get("datasets") or {}
+        if dataset_name not in datasets:
+            raise RequestError(f"Bảng không hợp lệ: {req.get('bang', '')}")
+
+        dataset = datasets[dataset_name]
+        valid_cols = set(dataset.get("columns") or [])
+        col_sheet_name = "Cột Export" if dataset_name == "export" else "Cột Import"
+        if col_sheet_name not in wb.sheetnames:
+            raise RequestError(f"Thiếu sheet {col_sheet_name}.")
+        filters, select_cols, warnings = parse_column_sheet(
+            wb[col_sheet_name],
+            valid_cols,
+            column_cfg.get("operator_defaults") or {},
+        )
+        if not filters and not select_cols:
+            raise RequestError("Chưa chọn cột filter cũng chưa chọn cột lấy về.")
+
+        return {
+            "request": req,
+            "dataset": dataset,
+            "dataset_name": dataset_name,
+            "filters": filters,
+            "select_cols": select_cols,
+            "warnings": warnings,
+        }
     finally:
         wb.close()
-
-
-def find_template(request_type, templates):
-    wanted = cell_text(request_type)
-    if not wanted:
-        raise RequestError("Thiếu Loại request.")
-    if wanted in templates:
-        return wanted, templates[wanted]
-    for name, template in templates.items():
-        if cell_text(template.get("label")) == wanted:
-            return name, template
-    valid = ", ".join(sorted(templates)) or "(chưa có template)"
-    raise RequestError(f"Template không tồn tại: {wanted}. Template hợp lệ: {valid}")
 
 
 def parse_months(raw):
@@ -202,6 +310,34 @@ def parse_months(raw):
     return [f"{m:02d}" for m in months]
 
 
+def parse_years(raw):
+    text = cell_text(raw).lower()
+    if text == "all":
+        raise RequestError("Không hỗ trợ all cho Năm. Vui lòng liệt kê năm cụ thể.")
+    if not text:
+        raise RequestError("Thiếu Năm.")
+    years = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            start, end = [item.strip() for item in part.split("-", 1)]
+            if not start.isdigit() or not end.isdigit():
+                raise RequestError(f"Năm không hợp lệ: {part}")
+            a, b = int(start), int(end)
+            if a > b:
+                raise RequestError(f"Khoảng năm không hợp lệ: {part}")
+            years.extend(range(a, b + 1))
+        else:
+            if not part.isdigit():
+                raise RequestError(f"Năm không hợp lệ: {part}")
+            years.append(int(part))
+    if not years:
+        raise RequestError("Thiếu Năm.")
+    return years
+
+
 def table_exists(cur, schema, table):
     cur.execute(
         """
@@ -231,11 +367,163 @@ def glob_tables(cur, schema, pattern):
     return [r[0] for r in cur.fetchall()]
 
 
+def candidate_tables_from_pattern(pattern, today=None):
+    today = today or dt.date.today()
+    has_year = "{year}" in pattern
+    has_month = "{month}" in pattern
+    if not has_year and not has_month:
+        return [pattern]
+    years = range(today.year, today.year - 5, -1) if has_year else [""]
+    months = range(12, 0, -1) if has_month else [""]
+    candidates = []
+    for year in years:
+        for month in months:
+            values = {
+                "year": year,
+                "month": f"{month:02d}" if isinstance(month, int) else month,
+            }
+            candidates.append(pattern.format(**values))
+    return candidates
+
+
+def find_sample_table(cur, schema, pattern, today=None):
+    pattern = cell_text(pattern)
+    if "*" in pattern and "{year}" not in pattern and "{month}" not in pattern:
+        like = pattern.replace("*", "%")
+        cur.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = %s
+              AND table_name LIKE %s
+            ORDER BY table_name DESC
+            LIMIT 1
+            """,
+            (schema, like),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+    for table in candidate_tables_from_pattern(pattern, today=today):
+        if table_exists(cur, schema, table):
+            return table
+    return None
+
+
+def scan_table_columns(cur, schema, table):
+    cur.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = %s
+          AND table_name = %s
+        ORDER BY ordinal_position
+        """,
+        (schema, table),
+    )
+    return [row[0] for row in cur.fetchall()]
+
+
+def diff_columns(old, new):
+    old_set = set(old or [])
+    new_set = set(new or [])
+    added = [col for col in new if col not in old_set]
+    removed = [col for col in old if col not in new_set]
+    return added, removed
+
+
+def confirm_column_overwrite(dataset_name, old_columns, new_columns, input_func=input):
+    added, removed = diff_columns(old_columns, new_columns)
+    print(
+        f"[SCAN] dataset={dataset_name} columns changed: "
+        f"+{len(added)} -{len(removed)}"
+    )
+    if added:
+        print(f"[SCAN] added: {', '.join(added)}")
+    if removed:
+        print(f"[SCAN] removed: {', '.join(removed)}")
+    answer = input_func("Overwrite columns in column.yaml? [Y/n] ").strip().lower()
+    return answer in ("", "y", "yes")
+
+
+def scan_columns(column_path=None, cfg=None, dataset_name=None, yes=False, input_func=input, today=None):
+    path = Path(column_path or COLUMN_FILE)
+    if not path.exists():
+        create_column_skeleton(path)
+        raise RunnerConfigError(COLUMN_SETUP_MESSAGE)
+
+    column_cfg = load_yaml_file(path, {})
+    datasets = column_cfg.get("datasets") or {}
+    if not datasets:
+        raise RunnerConfigError(COLUMN_SETUP_MESSAGE)
+    if dataset_name:
+        if dataset_name not in datasets:
+            raise RunnerConfigError(f"Dataset không tồn tại trong column.yaml: {dataset_name}")
+        scan_names = [dataset_name]
+    else:
+        scan_names = list(datasets)
+
+    for name in scan_names:
+        dataset = datasets.get(name) or {}
+        missing = [key for key in ("database", "schema", "tables") if not dataset.get(key)]
+        if missing:
+            raise RunnerConfigError(f"Dataset {name} thiếu field: {', '.join(missing)}")
+
+    cfg = load_connection_config() if cfg is None else cfg
+    messages = []
+    updated = False
+    for name in scan_names:
+        dataset = datasets[name]
+        conn = portal.connect(cfg, dataset["database"])
+        try:
+            if hasattr(conn, "set_client_encoding"):
+                conn.set_client_encoding("UTF8")
+            cur = conn.cursor()
+            try:
+                sample_table = find_sample_table(cur, dataset["schema"], dataset["tables"], today=today)
+                if not sample_table:
+                    message = f"[SCAN] dataset={name} không tìm thấy bảng mẫu cho pattern={dataset['tables']}"
+                    print(message)
+                    messages.append(message)
+                    continue
+                columns = scan_table_columns(cur, dataset["schema"], sample_table)
+                old_columns = list(dataset.get("columns") or [])
+                if old_columns and old_columns != columns and not yes:
+                    if not confirm_column_overwrite(name, old_columns, columns, input_func=input_func):
+                        message = f"[SCAN] dataset={name} bỏ qua cập nhật columns"
+                        print(message)
+                        messages.append(message)
+                        continue
+                dataset["columns"] = columns
+                updated = True
+                message = (
+                    f"[SCAN] dataset={name} sample_table={dataset['schema']}.{sample_table} "
+                    f"-> {len(columns)} columns"
+                )
+                print(message)
+                messages.append(message)
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+
+    if updated:
+        column_cfg["datasets"] = datasets
+        column_cfg["operator_defaults"] = column_cfg.get("operator_defaults") or {}
+        write_yaml_file(path, column_cfg)
+        message = f"[SCAN] operator_defaults giữ nguyên ({len(column_cfg['operator_defaults'])} entries)"
+        print(message)
+        messages.append(message)
+        message = "[SCAN] column.yaml đã cập nhật."
+        print(message)
+        messages.append(message)
+    return messages
+
+
 def expand_tables(cur, schema, pattern, request):
     pattern = cell_text(pattern)
     if "{year}" in pattern and not cell_text(request.get("year")):
         raise RequestError("Template cần Năm nhưng request chưa điền.")
-    years = [cell_text(request.get("year"))] if "{year}" in pattern else [""]
+    years = [str(year) for year in parse_years(request.get("year"))] if "{year}" in pattern else [""]
     if "{month}" in pattern:
         months = parse_months(request.get("month"))
     else:
@@ -280,53 +568,7 @@ def split_values(raw):
     return [part.strip() for part in cell_text(raw).split(",") if part.strip()]
 
 
-def resolve_columns(request, template, valid_columns):
-    override = split_values(request.get("columns"))
-    if override:
-        chosen = override
-    else:
-        configured = template.get("columns", "ALL")
-        chosen = list(valid_columns) if configured == "ALL" else list(configured or [])
-    bad = [col for col in chosen if col not in valid_columns]
-    if bad:
-        valid = ", ".join(valid_columns)
-        raise RequestError(f"Cột không hợp lệ: {', '.join(bad)}. Cột hợp lệ: {valid}")
-    if not chosen:
-        raise RequestError("Không có cột nào để export.")
-    return chosen
-
-
-def parse_filter_value(filter_def, raw_value):
-    op = filter_def.get("type")
-    raw = cell_text(raw_value)
-    if not raw:
-        if filter_def.get("required"):
-            raise RequestError(f"Thiếu giá trị bắt buộc: {filter_def.get('label') or filter_def.get('column')}")
-        return None
-    if op in ("prefix", "in"):
-        values = split_values(raw)
-        if not values:
-            return None
-        return values
-    if op == "between":
-        parts = split_values(raw)
-        if len(parts) != 2:
-            raise RequestError(f"Giá trị between cần đúng 2 mốc: {filter_def.get('column')}")
-        return tuple(parts)
-    return raw
-
-
-def build_filters_from_request(request, template):
-    filters = []
-    for index, filter_def in enumerate(template.get("filters") or [], 1):
-        value = parse_filter_value(filter_def, request.get(f"value_{index}"))
-        if value is None:
-            continue
-        filters.append((filter_def["column"], filter_def["type"], value))
-    return filters
-
-
-def parse_split_config(raw, template_split):
+def parse_split_config(raw, template_split=None):
     text = cell_text(raw)
     if not text and template_split:
         return template_split.get("column"), template_split.get("chars")
@@ -340,68 +582,79 @@ def parse_split_config(raw, template_split):
     return text, None
 
 
-def note_rows(request, template_name, template, missing_tables, extra=None):
+def is_v5_request_file(path):
+    wb = load_workbook(path, read_only=True)
+    try:
+        names = set(wb.sheetnames)
+        return "Cột Export" in names or "Cột Import" in names
+    finally:
+        wb.close()
+
+
+def normalize_v5_filter_value(op, val):
+    if op in ("prefix", "in"):
+        return split_values(val)
+    if op == "between":
+        parts = split_values(val)
+        return (parts[0], parts[1])
+    return cell_text(val)
+
+
+def note_rows_v5(parsed, missing_tables):
+    req = parsed["request"]
     rows = [
-        ("Template", template_name),
-        ("Loại request", template.get("label", template_name)),
-        ("Người yêu cầu", request.get("user", "")),
-        ("Ghi chú / tên request", request.get("request_name", "")),
-        ("Năm", request.get("year", "")),
-        ("Tháng", request.get("month", "")),
-        ("Giá trị 1", request.get("value_1", "")),
-        ("Giá trị 2", request.get("value_2", "")),
-        ("Giá trị 3", request.get("value_3", "")),
+        ("Bảng", parsed["dataset_name"]),
+        ("Người yêu cầu", req.get("user", "")),
+        ("Ghi chú / tên request", req.get("request_name", "")),
+        ("Năm", req.get("year", "")),
+        ("Tháng", req.get("month", "")),
+        ("Số filter", len(parsed["filters"])),
+        ("Số cột lấy về", len(parsed["select_cols"])),
     ]
     if missing_tables:
         rows.append(("Bảng thiếu", ", ".join(missing_tables)))
-    for item in extra or []:
-        rows.append(item)
+    for warning in parsed.get("warnings") or []:
+        rows.append(("WARNING", warning))
     return rows
 
 
-def build_select_jobs(request, template_name, template, cur):
-    schema = template["schema"]
-    tables, missing = expand_tables(cur, schema, template["tables"], request)
+def build_jobs_from_v5_request(parsed, cur):
+    req = parsed["request"]
+    dataset = parsed["dataset"]
+    schema = dataset["schema"]
+    tables, missing = expand_tables(cur, schema, dataset["tables"], req)
     if not tables:
-        raise RequestError(f"Không có bảng nào tồn tại cho pattern: {template['tables']}")
+        raise RequestError(f"Không có bảng nào tồn tại cho pattern: {dataset['tables']}")
+
     valid_columns = common_columns(cur, schema, tables)
-    columns = resolve_columns(request, template, valid_columns)
-    filters = build_filters_from_request(request, template)
-    split_col, split_len = parse_split_config(request.get("split"), template.get("split"))
-    if split_col and split_col not in valid_columns:
+    selected = list(parsed["select_cols"])
+    filter_columns = [item["col"] for item in parsed["filters"]]
+    needed = selected + filter_columns
+    split_col, split_len = parse_split_config(req.get("split"), None)
+    if split_col:
+        needed.append(split_col)
+    bad = [col for col in needed if col not in valid_columns]
+    if bad:
         valid = ", ".join(valid_columns)
-        raise RequestError(f"Cột tách file không hợp lệ: {split_col}. Cột hợp lệ: {valid}")
-    merge = template.get("merge", "union")
+        raise RequestError(f"Cột không có trong bảng đã chọn: {', '.join(sorted(set(bad)))}. Cột hợp lệ: {valid}")
+
+    filters = [
+        (item["col"], item["op"], normalize_v5_filter_value(item["op"], item["val"]))
+        for item in parsed["filters"]
+    ]
     state = {
-        "db": template["database"],
+        "db": dataset["database"],
         "schema": schema,
         "tables": tables,
-        "cols": columns,
+        "cols": selected,
         "filters": filters,
         "split": split_col,
         "split_len": split_len,
-        "sort": template.get("sort"),
-        "merged": merge == "union",
+        "sort": None,
+        "merged": len(tables) > 1,
     }
     jobs = portal.make_jobs(state, cur)
-    notes = note_rows(request, template_name, template, missing)
-    return jobs, notes, columns
-
-
-TYPE_BUILDERS = {"select": build_select_jobs}
-
-
-def build_jobs_from_request(request, templates, cur):
-    template_name, template = find_template(request.get("request_type"), templates)
-    request_type = template.get("type", "select")
-    builder = TYPE_BUILDERS.get(request_type)
-    if builder is None:
-        raise RequestError(f"Loại template chưa hỗ trợ: {request_type}")
-    if not cell_text(request.get("user")):
-        raise RequestError("Thiếu Người yêu cầu.")
-    if not cell_text(request.get("request_name")):
-        raise RequestError("Thiếu Ghi chú / tên request.")
-    return template["database"], builder(request, template_name, template, cur)
+    return dataset["database"], (jobs, note_rows_v5(parsed, missing), selected)
 
 
 def estimate_mb(rows, columns):
@@ -459,9 +712,9 @@ def fetch_headers(conn, query, params):
         return [d[0] for d in cur.description]
 
 
-def export_xlsx_with_note(conn, query, params, headers, filepath, notes):
+def export_xlsx_v5_with_note(conn, query, params, headers, filepath, notes):
     wb = Workbook(write_only=True)
-    ws = wb.create_sheet("data")
+    ws = wb.create_sheet("Data")
     ws.append(headers)
     count = 0
     with conn.cursor(name="bulkex_runner_stream") as cur:
@@ -513,20 +766,28 @@ def move_request(path, folder_name):
 
 
 def move_to_error(path, message):
-    moved = move_request(path, "error")
+    path = Path(path)
+    moved = move_finished_file(path, path.with_name(f"{REJECT_PREFIX}{path.name}"))
     txt = moved.with_suffix(".txt")
     with open(txt, "w", encoding="utf-8") as f:
-        f.write(message.strip() + "\n")
+        f.write(f"File: {path.name}\n")
+        f.write(f"Timestamp: {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write("LỖI:\n")
+        for line in str(message).strip().splitlines() or ["Lỗi không xác định"]:
+            f.write(f"- {line}\n")
+        f.write("\nCách xử lý:\n")
+        f.write(f"- Mở file {moved.name}, sửa lại các cột lỗi.\n")
+        f.write(f"- Đổi tên bỏ tiền tố {REJECT_PREFIX} hoặc save tên mới, thả lại vào folder.\n")
     return moved
 
 
-def process_request_file(path, cfg, conns, settings, templates):
-    request = parse_request_xlsx(path)
-    template_name, template = find_template(request.get("request_type"), templates)
-    conn = portal.get_conn(conns, cfg, template["database"])
+def process_request_file_v5(path, cfg, conns, settings, column_cfg):
+    parsed = parse_request_v5(path, column_cfg)
+    dataset = parsed["dataset"]
+    conn = portal.get_conn(conns, cfg, dataset["database"])
     cur = conn.cursor()
     try:
-        _dbname, (jobs, base_notes, columns) = build_jobs_from_request(request, templates, cur)
+        _dbname, (jobs, base_notes, columns) = build_jobs_from_v5_request(parsed, cur)
         rows_by_job = []
         for job in jobs:
             rows = portal.count_rows(cur, job[2], job[3])
@@ -535,6 +796,7 @@ def process_request_file(path, cfg, conns, settings, templates):
     finally:
         cur.close()
 
+    request = parsed["request"]
     max_auto = int(settings.get("max_rows_auto", DEFAULT_SETTINGS["max_rows_auto"]))
     max_hard = int(settings.get("max_rows_hard", DEFAULT_SETTINGS["max_rows_hard"]))
     confirmed = cell_text(request.get("large_confirm")).upper() == "YES"
@@ -548,7 +810,7 @@ def process_request_file(path, cfg, conns, settings, templates):
         if rows > max_auto and not confirmed:
             raise RequestError(
                 f"Query ra {rows:,} dòng (ước ~{mb:.1f} MB). Nếu chắc chắn, "
-                "điền ô 'Xác nhận dữ liệu lớn' = YES rồi gửi lại."
+                "điền ô 'Xác nhận lớn' = YES rồi gửi lại."
             )
 
     TMP_DIR.mkdir(parents=True, exist_ok=True)
@@ -557,7 +819,7 @@ def process_request_file(path, cfg, conns, settings, templates):
         rows = rows_by_job[index]
         force_csv = rows > XLSX_ROW_LIMIT
         ext = ".csv" if force_csv else ".xlsx"
-        suffix = public_job_suffix(name, template["database"], template["schema"]) if len(jobs) > 1 else ""
+        suffix = public_job_suffix(name, dataset["database"], dataset["schema"]) if len(jobs) > 1 else ""
         final_path = output_path_for_job(settings, request, suffix, ext)
         tmp_path = unique_path(TMP_DIR / final_path.name)
         notes = list(base_notes)
@@ -571,7 +833,7 @@ def process_request_file(path, cfg, conns, settings, templates):
             exported = export_csv_with_note(conn, query, params, headers, tmp_path, notes)
             txt_src = tmp_path.with_suffix(".txt")
         else:
-            exported = export_xlsx_with_note(conn, query, params, headers, tmp_path, notes)
+            exported = export_xlsx_v5_with_note(conn, query, params, headers, tmp_path, notes)
             txt_src = None
         conn.rollback()
         final = move_finished_file(tmp_path, final_path)
@@ -582,6 +844,16 @@ def process_request_file(path, cfg, conns, settings, templates):
     moved = move_request(path, "processed")
     log_event(f"Processed request {path.name} -> {moved}")
     return moved
+
+
+def process_request_file(path, cfg, conns, settings):
+    if is_v5_request_file(path):
+        return process_request_file_v5(path, cfg, conns, settings, load_column_config())
+
+    raise RequestError(
+        "File request không đúng mẫu v5. Vui lòng tạo lại từ request_template.xlsx mới "
+        "bằng lệnh: python runner.py --make-template."
+    )
 
 
 def is_file_stable(path, wait_seconds=5):
@@ -597,24 +869,23 @@ def request_files(settings, stable_wait=5):
     for path in sorted(root.glob("*.xlsx")):
         if path.name.startswith("~$"):
             continue
+        if path.name.startswith(REJECT_PREFIX):
+            continue
         if not is_file_stable(path, stable_wait):
             log_event(f"Skip unstable file: {path.name}")
             continue
         yield path
 
 
-def run_once(settings=None, templates=None, cfg=None, stable_wait=5):
+def run_once(settings=None, cfg=None, stable_wait=5):
     settings = load_settings() if settings is None else settings
-    templates = load_templates() if templates is None else templates
-    for warning in validate_templates(templates):
-        log_event(f"WARNING: {warning}")
     cfg = load_connection_config() if cfg is None else cfg
     conns = {}
     processed = 0
     try:
         for path in request_files(settings, stable_wait=stable_wait):
             try:
-                process_request_file(path, cfg, conns, settings, templates)
+                process_request_file(path, cfg, conns, settings)
                 processed += 1
             except psycopg2.OperationalError as e:
                 log_event(f"DB down, giữ request {path.name}: {e}")
@@ -633,26 +904,189 @@ def run_once(settings=None, templates=None, cfg=None, stable_wait=5):
     return processed
 
 
-def make_request_template(templates, output_path=REQUEST_TEMPLATE_FILE):
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Request"
-    ws.column_dimensions["A"].width = 28
-    ws.column_dimensions["B"].width = 48
-    for row, label in enumerate(REQUEST_LABELS, 1):
-        ws.cell(row=row, column=1, value=label)
-    list_ws = wb.create_sheet("templates")
-    labels = []
-    for name, template in sorted(templates.items()):
-        labels.append(template.get("label") or name)
-    if not labels:
-        labels = ["(chưa có template)"]
-    for row, label in enumerate(labels, 1):
-        list_ws.cell(row=row, column=1, value=label)
-    list_ws.sheet_state = "hidden"
-    dv = DataValidation(type="list", formula1=f"=templates!$A$1:$A${len(labels)}", allow_blank=False)
+def column_union(column_cfg):
+    seen = []
+    for dataset in (column_cfg.get("datasets") or {}).values():
+        for column in dataset.get("columns") or []:
+            if column not in seen:
+                seen.append(column)
+    return seen
+
+
+def quoted_list_formula(values):
+    escaped = [str(value).replace('"', '""') for value in values]
+    return '"' + ",".join(escaped) + '"'
+
+
+def style_table_header(ws, row, columns):
+    navy_fill = PatternFill(start_color="1F3864", end_color="1F3864", fill_type="solid")
+    white_font = Font(name="Calibri", size=11, color="FFFFFF", bold=True)
+    border = Border(
+        left=Side(style="thin", color="BFBFBF"),
+        right=Side(style="thin", color="BFBFBF"),
+        top=Side(style="thin", color="BFBFBF"),
+        bottom=Side(style="thin", color="BFBFBF"),
+    )
+    for col in range(1, columns + 1):
+        cell = ws.cell(row=row, column=col)
+        cell.fill = navy_fill
+        cell.font = white_font
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = border
+
+
+def apply_border(ws, min_row, max_row, min_col, max_col):
+    border = Border(
+        left=Side(style="thin", color="BFBFBF"),
+        right=Side(style="thin", color="BFBFBF"),
+        top=Side(style="thin", color="BFBFBF"),
+        bottom=Side(style="thin", color="BFBFBF"),
+    )
+    for row in ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col):
+        for cell in row:
+            cell.border = border
+
+
+def add_list_validation(ws, cells, values, allow_blank=True):
+    dv = DataValidation(type="list", formula1=quoted_list_formula(values), allow_blank=allow_blank)
     ws.add_data_validation(dv)
-    dv.add(ws["B2"])
+    dv.add(cells)
+    return dv
+
+
+def setup_request_sheet(ws, column_cfg):
+    ws.title = "Request"
+    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["B"].width = 40
+    ws.freeze_panes = "B1"
+    style_table_header(ws, 1, 1)
+    value_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+    border = Border(
+        left=Side(style="thin", color="BFBFBF"),
+        right=Side(style="thin", color="BFBFBF"),
+        top=Side(style="thin", color="BFBFBF"),
+        bottom=Side(style="thin", color="BFBFBF"),
+    )
+    for row, label in enumerate(REQUEST_V5_LABELS_ORDER, 1):
+        header = ws.cell(row=row, column=1, value=label)
+        header.fill = PatternFill(start_color="1F3864", end_color="1F3864", fill_type="solid")
+        header.font = Font(name="Calibri", size=11, color="FFFFFF", bold=True)
+        header.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
+        header.border = border
+        value = ws.cell(row=row, column=2)
+        value.fill = value_fill
+        value.border = border
+        value.number_format = "@"
+        value.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    datasets = list((column_cfg.get("datasets") or {}).keys())
+    if datasets:
+        add_list_validation(ws, "B2", datasets, allow_blank=False)
+    split_columns = column_union(column_cfg)
+    if split_columns:
+        add_list_validation(ws, "B5", split_columns, allow_blank=True)
+    add_list_validation(ws, "B6", ["YES"], allow_blank=True)
+    ws.print_area = "A1:B7"
+
+
+def setup_column_sheet(ws, title, columns):
+    ws.title = title
+    ws.append(["Cột", "Toán tử", "Giá trị", "Lấy về?"])
+    style_table_header(ws, 1, 4)
+    ws.freeze_panes = "A2"
+    widths = {"A": 35, "B": 18, "C": 30, "D": 12}
+    for key, width in widths.items():
+        ws.column_dimensions[key].width = width
+
+    gray_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
+    zebra_fill = PatternFill(start_color="FAFAFA", end_color="FAFAFA", fill_type="solid")
+    for index, column in enumerate(columns, 2):
+        ws.cell(row=index, column=1, value=column)
+        if index % 2 == 0:
+            for col in range(1, 5):
+                ws.cell(row=index, column=col).fill = zebra_fill
+        col_cell = ws.cell(row=index, column=1)
+        col_cell.fill = gray_fill
+        col_cell.font = Font(name="Calibri", size=11, italic=True)
+        col_cell.protection = Protection(locked=False)
+        ws.cell(row=index, column=3).number_format = "@"
+        ws.cell(row=index, column=4).alignment = Alignment(horizontal="center", vertical="center")
+
+    max_row = max(len(columns) + 1, 2)
+    apply_border(ws, 1, max_row, 1, 4)
+    add_list_validation(ws, f"B2:B{max_row}", ["eq", "in", "prefix", "contains", "between"], allow_blank=True)
+    add_list_validation(ws, f"D2:D{max_row}", ["YES", "NO"], allow_blank=True)
+    yellow_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+    ws.conditional_formatting.add(
+        f"A2:D{max_row}",
+        FormulaRule(formula=["NOT(ISBLANK($B2))"], stopIfTrue=False, fill=yellow_fill),
+    )
+    ws.print_area = f"A1:D{max_row}"
+
+
+def setup_reference_sheet(ws):
+    ws.title = "Tham chiếu"
+    sections = [
+        ["Toán tử", "Ý nghĩa", "Cách nhập Giá trị", "Ví dụ"],
+        ["eq", "Bằng đúng", "1 giá trị", "CN"],
+        ["in", "Trong danh sách", "Nhiều, cách phẩy", "CN,KR,JP"],
+        ["prefix", "Bắt đầu bằng", "1 hoặc nhiều prefix, cách phẩy", "84,85 hoặc 0301234"],
+        ["contains", "Chứa chuỗi", "1 chuỗi", "laptop"],
+        ["between", "Trong khoảng", "Đúng 2 giá trị, cách phẩy", "1000,5000"],
+        [],
+        ["Cột", "Mục đích"],
+        ["Cột", "Tên cột DB đã điền sẵn, chỉ là visual reference."],
+        ["Toán tử", "Cách so sánh. Để trống nếu chỉ muốn xuất cột này."],
+        ["Giá trị", "Giá trị cần tìm. Bắt buộc nếu có Toán tử."],
+        ["Lấy về?", "YES = cột này có trong file kết quả. NO/trống = không."],
+        [],
+        ["Cú pháp Tháng", "Ý nghĩa"],
+        ["03", "Tháng 3"],
+        ["01,03,05", "Tháng 1, 3, 5"],
+        ["01-06", "Tháng 1 đến 6"],
+        ["all", "Cả 12 tháng"],
+        [],
+        ["Logic quyết định"],
+        ["Có Toán tử + Có Giá trị", "Filter WHERE, auto SELECT"],
+        ["Có Toán tử + Trống Giá trị", "LỖI: thiếu giá trị"],
+        ["Trống Toán tử + Có Giá trị", "Có default thì auto áp default, nếu không thì warning bỏ qua"],
+        ["Trống Toán tử + Trống Giá trị", "YES ở Lấy về? thì SELECT, NO/trống thì skip"],
+    ]
+    for row in sections:
+        ws.append(row)
+    ws.column_dimensions["A"].width = 28
+    ws.column_dimensions["B"].width = 56
+    ws.column_dimensions["C"].width = 32
+    ws.column_dimensions["D"].width = 28
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+            if cell.value:
+                cell.border = Border(
+                    left=Side(style="thin", color="BFBFBF"),
+                    right=Side(style="thin", color="BFBFBF"),
+                    top=Side(style="thin", color="BFBFBF"),
+                    bottom=Side(style="thin", color="BFBFBF"),
+                )
+    style_table_header(ws, 1, 4)
+    style_table_header(ws, 8, 2)
+    style_table_header(ws, 14, 2)
+    style_table_header(ws, 20, 2)
+
+
+def make_request_template_v5(column_cfg, output_path=None):
+    output_path = output_path or REQUEST_TEMPLATE_FILE
+    datasets = column_cfg.get("datasets") or {}
+    export_columns = list((datasets.get("export") or {}).get("columns") or [])
+    import_columns = list((datasets.get("import") or {}).get("columns") or [])
+    if not export_columns and not import_columns:
+        raise RunnerConfigError("column.yaml chưa có columns. Chạy: python runner.py --scan-columns")
+
+    wb = Workbook()
+    setup_request_sheet(wb.active, column_cfg)
+    setup_column_sheet(wb.create_sheet("Cột Export"), "Cột Export", export_columns)
+    setup_column_sheet(wb.create_sheet("Cột Import"), "Cột Import", import_columns)
+    setup_reference_sheet(wb.create_sheet("Tham chiếu"))
+
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)
     return Path(output_path)
@@ -661,23 +1095,36 @@ def make_request_template(templates, output_path=REQUEST_TEMPLATE_FILE):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="SQL BulkEx request runner")
     parser.add_argument("--once", action="store_true", help="Chạy một vòng quét request rồi thoát")
-    parser.add_argument("--make-template", action="store_true", help="Sinh request_template.xlsx từ templates.yaml")
+    parser.add_argument("--make-template", action="store_true", help="Sinh request_template.xlsx từ column.yaml")
+    parser.add_argument("--scan-columns", action="store_true", help="Quét DB và cập nhật column.yaml")
+    parser.add_argument("--dataset", help="Chỉ scan một dataset trong column.yaml")
+    parser.add_argument("--yes", action="store_true", help="Bỏ qua confirm khi cập nhật columns")
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     configure_stdio()
     args = parse_args(argv)
-    settings = load_settings()
-    templates = load_templates()
-    for warning in validate_templates(templates):
-        log_event(f"WARNING: {warning}")
+    if args.scan_columns:
+        try:
+            scan_columns(dataset_name=args.dataset, yes=args.yes)
+            return 0
+        except RunnerConfigError as e:
+            log_event(str(e))
+            print(str(e))
+            return 1
 
     if args.make_template:
-        path = make_request_template(templates)
-        print(f"Đã sinh file mẫu: {path}")
-        return 0
+        try:
+            path = make_request_template_v5(load_column_config())
+            print(f"Đã sinh file mẫu: {path}")
+            return 0
+        except RunnerConfigError as e:
+            log_event(str(e))
+            print(str(e))
+            return 1
 
+    settings = load_settings()
     try:
         cfg = load_connection_config()
     except RunnerConfigError as e:
@@ -685,10 +1132,10 @@ def main(argv=None):
         print(str(e))
         return 1
     if args.once:
-        return 0 if run_once(settings=settings, templates=templates, cfg=cfg) >= 0 else 1
+        return 0 if run_once(settings=settings, cfg=cfg) >= 0 else 1
 
     while True:
-        run_once(settings=settings, templates=templates, cfg=cfg)
+        run_once(settings=settings, cfg=cfg)
         time.sleep(int(settings.get("poll_seconds", DEFAULT_SETTINGS["poll_seconds"])))
 
 

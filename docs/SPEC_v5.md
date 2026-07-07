@@ -311,26 +311,26 @@ def load_column_config(path=COLUMN_YAML):
 ```python
 def parse_request_v5(path, column_cfg):
     wb = load_workbook(path, data_only=True)
-
+    
     # Sheet Request → 7 fields
     req = parse_sheet_request(wb["Request"])
     dataset_name = req["bang"].lower()  # 'export' | 'import'
     if dataset_name not in column_cfg["datasets"]:
         raise RequestError(f"Bảng không hợp lệ: {req['bang']}")
-
+    
     dataset = column_cfg["datasets"][dataset_name]
     valid_cols = set(dataset["columns"])
     op_defaults = column_cfg.get("operator_defaults") or {}
-
+    
     # Sheet Cột Export/Import → filter + select rules
     col_sheet_name = "Cột Export" if dataset_name == "export" else "Cột Import"
     filters, select_cols, warnings = parse_column_sheet(
         wb[col_sheet_name], valid_cols, op_defaults
     )
-
+    
     if not filters and not select_cols:
         raise RequestError("Chưa chọn cột filter cũng chưa chọn cột lấy về.")
-
+    
     return {
         "request": req,
         "dataset": dataset,
@@ -350,26 +350,26 @@ def parse_column_sheet(sheet, valid_cols, op_defaults):
     filters = []
     select_cols = []
     warnings = []
-
+    
     for row in sheet.iter_rows(min_row=2, max_col=4, values_only=True):
         col, op, val, out = [cell_text(c) for c in row]
-
+        
         if not col:
             continue
         if col not in valid_cols:
             # không nên xảy ra vì sheet pre-populated, nhưng defensive
             warnings.append(f"Cột không hợp lệ trong sheet: {col}")
             continue
-
+        
         op = op.lower() if op else ""
         out = out.upper() if out else ""
-
+        
         has_op = op in VALID_OPS
         has_val = bool(val)
-
+        
         if op and not has_op:
             raise RequestError(f"Cột {col}: toán tử không hợp lệ '{op}'. Chỉ chấp nhận: {', '.join(VALID_OPS)}")
-
+        
         # 4 case
         if has_op and has_val:
             # Filter + auto SELECT
@@ -394,7 +394,7 @@ def parse_column_sheet(sheet, valid_cols, op_defaults):
             if out == "YES" and col not in select_cols:
                 select_cols.append(col)
             # NO / trống → skip
-
+    
     return filters, select_cols, warnings
 ```
 

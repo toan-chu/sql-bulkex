@@ -8,6 +8,7 @@ exports/
 .pytest_cache/
 .agents/
 .codex/
+memory/
 AGENTS.md
 handoff/
 docs/*.docx
