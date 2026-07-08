@@ -103,13 +103,16 @@ def fill_request(template_path, request_path, anchors, outputs, values=None):
     values = values or {}
     ws = wb["Cột Export"]
     by_col = {ws.cell(row=row, column=1).value: row for row in range(2, ws.max_row + 1)}
+    output_col = next(
+        col for col in range(1, ws.max_column + 1) if ws.cell(row=1, column=col).value == "Lấy về?"
+    )
     for column, op, value in anchors:
         row = by_col[column]
         if op:
             ws.cell(row=row, column=2, value=op)
         ws.cell(row=row, column=3, value=value)
     for column in outputs:
-        ws.cell(row=by_col[column], column=4, value="YES")
+        ws.cell(row=by_col[column], column=output_col, value="YES")
     for column, value in values.items():
         ws.cell(row=by_col[column], column=3, value=value)
     wb.save(request_path)

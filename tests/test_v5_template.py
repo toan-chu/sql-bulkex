@@ -59,7 +59,7 @@ def test_t24_export_sheet_row_count_matches_export_columns(tmp_path):
     assert wb["Cột Export"][f"A{len(EXPORT_COLUMNS) + 1}"].value == "export_col_32"
 
 
-def test_t25_operator_validation_has_five_options_and_allows_blank(tmp_path):
+def test_t25_operator_validation_uses_registry_display_options_and_allows_blank(tmp_path):
     wb = build_template(tmp_path)
     ws = wb["Cột Export"]
     dv = validation_for_cell(ws, "B2")
@@ -67,7 +67,7 @@ def test_t25_operator_validation_has_five_options_and_allows_blank(tmp_path):
     assert dv is not None
     assert dv.type == "list"
     assert dv.allow_blank
-    for option in ("eq", "in", "prefix", "contains", "between"):
+    for option in ("Bằng", "Trong danh sách", "Trong khoảng", "Bắt đầu bằng", "Chứa", "Kết thúc bằng"):
         assert option in dv.formula1
 
 
@@ -90,7 +90,7 @@ def test_t27_column_sheet_has_operator_conditional_formatting(tmp_path):
     for item in ws.conditional_formatting:
         rules.extend(ws.conditional_formatting[item])
 
-    assert any("A2:D33" in item for item in cf_ranges)
+    assert any("A2:E33" in item for item in cf_ranges)
     assert any(rule.type == "expression" and "NOT(ISBLANK($B2))" in rule.formula for rule in rules)
 
 

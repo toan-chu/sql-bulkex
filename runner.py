@@ -18,6 +18,8 @@ from psycopg2 import sql
 import yaml
 from openpyxl import Workbook, load_workbook
 from openpyxl.formatting.rule import FormulaRule
+from openpyxl.utils import get_column_letter
+from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 
@@ -44,6 +46,7 @@ REQUEST_V5_LABELS_ORDER = [
     "Xác nhận lớn",
     "Ghi chú / tên request",
 ]
+REQUEST_V6_LABELS_ORDER = REQUEST_V5_LABELS_ORDER + ["Người duyệt (Admin điền sau approve)"]
 COLUMN_SCAN_SKELETON = {
     "datasets": {
         "export": {
@@ -247,8 +250,13 @@ def parse_column_sheet(sheet, valid_cols, op_defaults, op_builder=None):
     select_cols = []
     warnings = []
 
-    for row in sheet.iter_rows(min_row=2, max_col=4, values_only=True):
-        col, op, val, out = [cell_text(cell) for cell in row]
+    max_col = 5 if (sheet.max_column or 0) >= 5 else 4
+    for row in sheet.iter_rows(min_row=2, max_col=max_col, values_only=True):
+        values = [cell_text(cell) for cell in row]
+        if max_col >= 5:
+            col, op, val, _digits, out = values
+        else:
+            col, op, val, out = values
         if not col:
             continue
         if col not in valid_cols:
@@ -1246,6 +1254,67 @@ def add_list_validation(ws, cells, values, allow_blank=True):
     return dv
 
 
+def operator_display_values(op_builder):
+    return [display for _key, display in op_builder.display_labels()]
+
+
+def digits_operator_displays(op_builder):
+    return [
+        display
+        for key, display in op_builder.display_labels()
+        if (op_builder.operators.get(key) or {}).get("supports_digits")
+    ]
+
+
+def excel_string_literal(value):
+    return '"' + str(value).replace('"', '""') + '"'
+
+
+def make_values_sheet(wb, column_cfg):
+    datasets = column_cfg.get("datasets") or {}
+    threshold = cardinality_settings(column_cfg)["threshold"]
+    values_by_column = {}
+    for dataset in datasets.values():
+        cardinality_cache = dataset.get("cardinality_cache") or {}
+        value_cache = dataset.get("value_cache") or {}
+        for column, values in value_cache.items():
+            count = cardinality_cache.get(column)
+            if count is None:
+                count = len(values or [])
+            try:
+                count_int = int(count)
+            except (TypeError, ValueError):
+                continue
+            if count_int > threshold or not values:
+                continue
+            target = values_by_column.setdefault(column, [])
+            for value in values:
+                text = "" if value is None else str(value)
+                if text not in target:
+                    target.append(text)
+
+    if not values_by_column:
+        return {}
+
+    ws = wb.create_sheet("Values")
+    ws.sheet_state = "hidden"
+    named_ranges = {}
+    for index, (column, values) in enumerate(values_by_column.items(), 1):
+        excel_col = get_column_letter(index)
+        ws.cell(row=1, column=index, value=column)
+        ws.cell(row=1, column=index).font = Font(name="Calibri", size=11, bold=True)
+        ws.column_dimensions[excel_col].width = max(14, min(35, len(column) + 4))
+        for row_index, value in enumerate(values, 2):
+            ws.cell(row=row_index, column=index, value=value)
+            ws.cell(row=row_index, column=index).number_format = "@"
+        last_row = len(values) + 1
+        range_name = f"{column}_values"
+        attr_text = f"Values!${excel_col}$2:${excel_col}${last_row}"
+        wb.defined_names.add(DefinedName(name=range_name, attr_text=attr_text))
+        named_ranges[column] = range_name
+    return named_ranges
+
+
 def setup_request_sheet(ws, column_cfg):
     ws.title = "Request"
     ws.column_dimensions["A"].width = 30
@@ -1259,7 +1328,7 @@ def setup_request_sheet(ws, column_cfg):
         top=Side(style="thin", color="BFBFBF"),
         bottom=Side(style="thin", color="BFBFBF"),
     )
-    for row, label in enumerate(REQUEST_V5_LABELS_ORDER, 1):
+    for row, label in enumerate(REQUEST_V6_LABELS_ORDER, 1):
         header = ws.cell(row=row, column=1, value=label)
         header.fill = PatternFill(start_color="1F3864", end_color="1F3864", fill_type="solid")
         header.font = Font(name="Calibri", size=11, color="FFFFFF", bold=True)
@@ -1272,20 +1341,53 @@ def setup_request_sheet(ws, column_cfg):
         value.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
     datasets = list((column_cfg.get("datasets") or {}).keys())
     if datasets:
-        add_list_validation(ws, "B2", datasets, allow_blank=False)
+        dataset_options = list(datasets)
+        if "export" in datasets and "import" in datasets and "both" not in dataset_options:
+            dataset_options.append("both")
+        add_list_validation(ws, "B2", dataset_options, allow_blank=False)
     split_columns = column_union(column_cfg)
     if split_columns:
         add_list_validation(ws, "B5", split_columns, allow_blank=True)
     add_list_validation(ws, "B6", ["YES"], allow_blank=True)
-    ws.print_area = "A1:B7"
+    ws.print_area = "A1:B8"
 
 
-def setup_column_sheet(ws, title, columns):
+def add_digits_validations(ws, cells, digits_displays):
+    dv = DataValidation(type="whole", operator="between", formula1="1", formula2="50", allow_blank=True)
+    dv.error = "Digits chỉ dùng cho Bắt đầu bằng / Kết thúc bằng"
+    dv.errorTitle = "Digits không hợp lệ"
+    ws.add_data_validation(dv)
+    dv.add(cells)
+    digit_checks = ",".join(f"$B2={excel_string_literal(display)}" for display in digits_displays)
+    allowed_ops_formula = f"OR({digit_checks})" if digit_checks else "FALSE"
+    custom = DataValidation(
+        type="custom",
+        formula1=f'=OR($D2="",AND({allowed_ops_formula},$D2>=1,$D2<=50,INT($D2)=$D2))',
+        allow_blank=True,
+    )
+    custom.error = "Digits chỉ dùng cho Bắt đầu bằng / Kết thúc bằng"
+    custom.errorTitle = "Digits không hợp lệ"
+    ws.add_data_validation(custom)
+    custom.add(cells)
+    return dv
+
+
+def add_value_dropdowns(ws, columns, named_ranges):
+    for index, column in enumerate(columns, 2):
+        range_name = named_ranges.get(column)
+        if not range_name:
+            continue
+        dv = DataValidation(type="list", formula1=f"={range_name}", allow_blank=True)
+        ws.add_data_validation(dv)
+        dv.add(ws.cell(row=index, column=3))
+
+
+def setup_column_sheet(ws, title, columns, op_builder, named_ranges):
     ws.title = title
-    ws.append(["Cột", "Toán tử", "Giá trị", "Lấy về?"])
-    style_table_header(ws, 1, 4)
+    ws.append(["Cột", "Toán tử", "Giá trị", "Digits", "Lấy về?"])
+    style_table_header(ws, 1, 5)
     ws.freeze_panes = "A2"
-    widths = {"A": 35, "B": 18, "C": 30, "D": 12}
+    widths = {"A": 35, "B": 22, "C": 30, "D": 10, "E": 12}
     for key, width in widths.items():
         ws.column_dimensions[key].width = width
 
@@ -1294,41 +1396,72 @@ def setup_column_sheet(ws, title, columns):
     for index, column in enumerate(columns, 2):
         ws.cell(row=index, column=1, value=column)
         if index % 2 == 0:
-            for col in range(1, 5):
+            for col in range(1, 6):
                 ws.cell(row=index, column=col).fill = zebra_fill
         col_cell = ws.cell(row=index, column=1)
         col_cell.fill = gray_fill
         col_cell.font = Font(name="Calibri", size=11, italic=True)
         col_cell.protection = Protection(locked=False)
         ws.cell(row=index, column=3).number_format = "@"
+        ws.cell(row=index, column=4).number_format = "0"
         ws.cell(row=index, column=4).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=index, column=5).alignment = Alignment(horizontal="center", vertical="center")
 
     max_row = max(len(columns) + 1, 2)
-    apply_border(ws, 1, max_row, 1, 4)
-    add_list_validation(ws, f"B2:B{max_row}", ["eq", "in", "prefix", "contains", "between"], allow_blank=True)
-    add_list_validation(ws, f"D2:D{max_row}", ["YES", "NO"], allow_blank=True)
+    apply_border(ws, 1, max_row, 1, 5)
+    add_list_validation(ws, f"B2:B{max_row}", operator_display_values(op_builder), allow_blank=True)
+    add_value_dropdowns(ws, columns, named_ranges)
+    digits_displays = digits_operator_displays(op_builder)
+    add_digits_validations(ws, f"D2:D{max_row}", digits_displays)
+    add_list_validation(ws, f"E2:E{max_row}", ["YES", "NO"], allow_blank=True)
     yellow_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
     ws.conditional_formatting.add(
-        f"A2:D{max_row}",
+        f"A2:E{max_row}",
         FormulaRule(formula=["NOT(ISBLANK($B2))"], stopIfTrue=False, fill=yellow_fill),
     )
-    ws.print_area = f"A1:D{max_row}"
+    inactive_fill = PatternFill(start_color="E7E6E6", end_color="E7E6E6", fill_type="solid")
+    inactive_font = Font(color="A6A6A6")
+    digit_checks = ",".join(f"$B2={excel_string_literal(display)}" for display in digits_displays)
+    inactive_formula = f"NOT(OR({digit_checks}))" if digit_checks else "TRUE"
+    ws.conditional_formatting.add(
+        f"D2:D{max_row}",
+        FormulaRule(formula=[inactive_formula], stopIfTrue=False, fill=inactive_fill, font=inactive_font),
+    )
+    ws.print_area = f"A1:E{max_row}"
 
 
-def setup_reference_sheet(ws):
+def setup_reference_sheet(ws, op_builder):
     ws.title = "Tham chiếu"
-    sections = [
-        ["Toán tử", "Ý nghĩa", "Cách nhập Giá trị", "Ví dụ"],
-        ["eq", "Bằng đúng", "1 giá trị", "CN"],
-        ["in", "Trong danh sách", "Nhiều, cách phẩy", "CN,KR,JP"],
-        ["prefix", "Bắt đầu bằng", "1 hoặc nhiều prefix, cách phẩy", "84,85 hoặc 0301234"],
-        ["contains", "Chứa chuỗi", "1 chuỗi", "laptop"],
-        ["between", "Trong khoảng", "Đúng 2 giá trị, cách phẩy", "1000,5000"],
+    operator_rows = [["Toán tử", "Ý nghĩa", "Cách nhập Giá trị", "Ví dụ", "Có Digits?"]]
+    for key, display in op_builder.display_labels():
+        spec = op_builder.operators[key]
+        operator_rows.append(
+            [
+                display,
+                display,
+                spec.get("hint", ""),
+                spec.get("example", ""),
+                "Có" if spec.get("supports_digits") else "Không",
+            ]
+        )
+    sections = operator_rows + [
+        [],
+        ["Digits", "Ghi chú"],
+        [
+            "Chỉ dùng với operator hỗ trợ Digits",
+            "Điền số nguyên = độ dài chuỗi kỳ vọng. Bỏ trống nếu không constrain độ dài.",
+        ],
+        ["Ví dụ", "HS Code bắt đầu bằng 84 + Digits 4 chỉ khớp mã 4 ký tự bắt đầu bằng 84."],
+        [],
+        ["Bảng = both", "Ghi chú"],
+        ["both", "Điền cả Cột Export và Cột Import. Runner xuất 2 sheet Export và Import."],
+        ["Một sheet trống", "Sheet đó vẫn được xuất trống, không lỗi."],
         [],
         ["Cột", "Mục đích"],
         ["Cột", "Tên cột DB đã điền sẵn, chỉ là visual reference."],
         ["Toán tử", "Cách so sánh. Để trống nếu chỉ muốn xuất cột này."],
         ["Giá trị", "Giá trị cần tìm. Bắt buộc nếu có Toán tử."],
+        ["Digits", "Độ dài chuỗi khi dùng operator bắt đầu/kết thúc bằng."],
         ["Lấy về?", "YES = cột này có trong file kết quả. NO/trống = không."],
         [],
         ["Cú pháp Tháng", "Ý nghĩa"],
@@ -1349,6 +1482,7 @@ def setup_reference_sheet(ws):
     ws.column_dimensions["B"].width = 56
     ws.column_dimensions["C"].width = 32
     ws.column_dimensions["D"].width = 28
+    ws.column_dimensions["E"].width = 14
     for row in ws.iter_rows():
         for cell in row:
             cell.alignment = Alignment(vertical="top", wrap_text=True)
@@ -1359,14 +1493,14 @@ def setup_reference_sheet(ws):
                     top=Side(style="thin", color="BFBFBF"),
                     bottom=Side(style="thin", color="BFBFBF"),
                 )
-    style_table_header(ws, 1, 4)
-    style_table_header(ws, 8, 2)
-    style_table_header(ws, 14, 2)
-    style_table_header(ws, 20, 2)
+    header_rows = [1, 9, 13, 18, 26, 32]
+    for row in header_rows:
+        style_table_header(ws, row, 5 if row == 1 else 2)
 
 
 def make_request_template_v5(column_cfg, output_path=None):
     output_path = output_path or REQUEST_TEMPLATE_FILE
+    op_builder = load_operator_builder()
     datasets = column_cfg.get("datasets") or {}
     export_columns = list((datasets.get("export") or {}).get("columns") or [])
     import_columns = list((datasets.get("import") or {}).get("columns") or [])
@@ -1374,10 +1508,14 @@ def make_request_template_v5(column_cfg, output_path=None):
         raise RunnerConfigError("column.yaml chưa có columns. Chạy: python runner.py --scan-columns")
 
     wb = Workbook()
+    named_ranges = make_values_sheet(wb, column_cfg)
     setup_request_sheet(wb.active, column_cfg)
-    setup_column_sheet(wb.create_sheet("Cột Export"), "Cột Export", export_columns)
-    setup_column_sheet(wb.create_sheet("Cột Import"), "Cột Import", import_columns)
-    setup_reference_sheet(wb.create_sheet("Tham chiếu"))
+    setup_column_sheet(wb.create_sheet("Cột Export"), "Cột Export", export_columns, op_builder, named_ranges)
+    setup_column_sheet(wb.create_sheet("Cột Import"), "Cột Import", import_columns, op_builder, named_ranges)
+    if "Values" in wb.sheetnames:
+        wb._sheets.append(wb._sheets.pop(wb.sheetnames.index("Values")))
+    setup_reference_sheet(wb.create_sheet("Tham chiếu"), op_builder)
+    wb.active = 0
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     wb.save(output_path)
