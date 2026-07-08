@@ -1,2 +1,110 @@
-datasets: {}
-operator_defaults: {}
+datasets:
+  export:
+    database: vn_import/export
+    schema: vietnam_export
+    tables: x_y{year}_{month}
+    columns:
+    - so_to_khai
+    - ma_chi_cuc_hai_quan_tao_moi
+    - phuong_thuc_van_chuyen
+    - ma_loai_hinh
+    - ma_nguoi_xuat_khau
+    - ten_nguoi_xuat_khau
+    - ten_nguoi_nhap_khau
+    - ma_nuoc
+    - so_van_don
+    - so_luong
+    - ma_don_vi_tinh
+    - tong_trong_luong_hang
+    - ma_don_vi_tinh_trong_luong
+    - ma_dia_diem_nhan_hang_cuoi_cung
+    - ma_dia_diem_xep_hang
+    - tong_gia_tri_hoa_don
+    - tong_gia_tri_tinh_thue
+    - tong_so_tien_thue_xuat_khau
+    - phan_ghi_chu
+    - ma_so_hang_hoa
+    - mo_ta_hang_hoa
+    - so_luong_1
+    - tri_gia_hoa_don
+    - don_gia_hoa_don
+    - ma_dong_tien_cua_don_gia_hoa_don
+    - tri_gia_tinh_thue_s
+    - tri_gia_tinh_thue_m
+    - don_gia_tinh_thue
+    - thue_suat_thue_xuat_khau
+    - phan_loai_nhap_thue_suat_thue_xuat_khau
+    - so_tien_thue_xuat_khau
+    - ma_mien_giam_khong_chiu_thue_xuat_khau
+    cardinality_cache: {}
+    value_cache: {}
+  import:
+    database: vn_import/export
+    schema: vietnam_import
+    tables: i_y{year}_{month}
+    columns:
+    - so_to_khai
+    - ma_chi_cuc_hai_quan_tao_moi
+    - phuong_thuc_van_chuyen
+    - ma_loai_hinh
+    - ma_nguoi_nhap_khau
+    - ten_nguoi_nhap_khau
+    - so_dien_thoai_nguoi_nhap_khau
+    - ten_nguoi_uy_thac_nhap_khau
+    - ten_nguoi_xuat_khau
+    - ma_nuoc
+    - so_van_don_1
+    - so_van_don_2
+    - so_van_don_3
+    - so_van_don_4
+    - so_van_don_5
+    - so_luong
+    - ma_don_vi_tinh
+    - tong_trong_luong_hang
+    - ma_don_vi_tinh_trong_luong
+    - so_luong_container
+    - ma_dia_diem_do_hang
+    - ma_dia_diem_xep_hang
+    - ten_phuong_tien_van_chuyen
+    - phuong_thuc_thanh_toan
+    - tong_tri_gia_hoa_don
+    - tong_tri_gia_tinh_thue
+    - tong_tien_thue_phai_nop
+    - ma_so_hang_hoa
+    - mo_ta_hang_hoa
+    - so_luong_1
+    - ma_don_vi_tinh_1
+    - tri_gia_hoa_don
+    - don_gia_hoa_don
+    - ma_dong_tien_cua_don_gia
+    - don_vi_cua_don_gia_va_so_luong
+    - tri_gia_tinh_thue_s
+    - tri_gia_tinh_thue_m
+    - don_gia_tinh_thue
+    - thue_suat_thue_nhap_khau
+    - so_tien_thue_nhap_khau
+    - ma_nuoc_xuat_xu
+    - phan_loai_giay_phep_nhap_khau_1
+    - ma_bieu_thue_nhap_khau
+    - ma_mien_giam_khong_chiu_thue_nhap_khau
+    cardinality_cache: {}
+    value_cache: {}
+operator_defaults:
+  ma_nguoi_xuat_khau: prefix       # MST — cover cả 10 và 13 số
+  ma_nguoi_nhap_khau: prefix
+  ma_so_hang_hoa: prefix           # HS code — user hay tra theo nhóm
+  mo_ta_hang_hoa: contains
+  ten_nguoi_xuat_khau: contains
+  ten_nguoi_nhap_khau: contains
+cardinality:
+  threshold: 30
+  sample_size: 1000
+  skip_text_length: 100
+  skip_columns:
+  - so_to_khai
+  - so_van_don
+  - so_van_don_1
+  - so_van_don_2
+  - so_van_don_3
+  - so_van_don_4
+  - so_van_don_5

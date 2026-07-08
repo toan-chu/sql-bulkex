@@ -2,6 +2,7 @@
 """Headless SQL BulkEx request runner."""
 
 import argparse
+import copy
 import csv
 import datetime as dt
 import os
@@ -50,9 +51,23 @@ COLUMN_SCAN_SKELETON = {
             "schema": "",
             "tables": "",
             "columns": [],
+            "cardinality_cache": {},
+            "value_cache": {},
         }
     },
     "operator_defaults": {},
+    "cardinality": {
+        "threshold": 30,
+        "sample_size": 1000,
+        "skip_text_length": 100,
+        "skip_columns": [],
+    },
+}
+DEFAULT_CARDINALITY = {
+    "threshold": 30,
+    "sample_size": 1000,
+    "skip_text_length": 100,
+    "skip_columns": [],
 }
 COLUMN_SETUP_MESSAGE = (
     "Chưa điền datasets trong column.yaml. "
@@ -144,7 +159,38 @@ def load_column_config(path=None):
     for column, op in op_defaults.items():
         if op not in valid_ops:
             raise RunnerConfigError(f"operator_defaults.{column} không hợp lệ: {op}")
+    validate_cardinality_config(data.get("cardinality") or {})
     return data
+
+
+def validate_cardinality_config(config):
+    threshold = int(config.get("threshold", DEFAULT_CARDINALITY["threshold"]))
+    sample_size = int(config.get("sample_size", DEFAULT_CARDINALITY["sample_size"]))
+    if threshold < 1 or threshold > 500:
+        raise RunnerConfigError("cardinality.threshold phải trong khoảng 1-500")
+    if sample_size < 100 or sample_size > 10000:
+        raise RunnerConfigError("cardinality.sample_size phải trong khoảng 100-10000")
+
+
+def cardinality_settings(column_cfg):
+    config = dict(DEFAULT_CARDINALITY)
+    config.update(column_cfg.get("cardinality") or {})
+    validate_cardinality_config(config)
+    config["threshold"] = int(config["threshold"])
+    config["sample_size"] = int(config["sample_size"])
+    config["skip_text_length"] = int(config["skip_text_length"])
+    config["skip_columns"] = list(config.get("skip_columns") or [])
+    return config
+
+
+def ensure_cardinality_schema(column_cfg):
+    config = dict(DEFAULT_CARDINALITY)
+    config.update(column_cfg.get("cardinality") or {})
+    column_cfg["cardinality"] = config
+    for dataset in (column_cfg.get("datasets") or {}).values():
+        dataset.setdefault("cardinality_cache", {})
+        dataset.setdefault("value_cache", {})
+    return column_cfg
 
 
 def load_operator_builder(path=None):
@@ -516,6 +562,253 @@ def scan_columns(column_path=None, cfg=None, dataset_name=None, yes=False, input
         print(message)
         messages.append(message)
         message = "[SCAN] column.yaml đã cập nhật."
+        print(message)
+        messages.append(message)
+    return messages
+
+
+def pg_stats_distinct(cur, schema, table, column):
+    cur.execute(
+        """
+        SELECT n_distinct
+        FROM pg_stats
+        WHERE schemaname = %s
+          AND tablename = %s
+          AND attname = %s
+        """,
+        (schema, table, column),
+    )
+    row = cur.fetchone()
+    if not row or row[0] is None:
+        return None
+    value = float(row[0])
+    if value >= 0:
+        return int(round(value))
+
+    cur.execute(
+        """
+        SELECT c.reltuples
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = %s
+          AND c.relname = %s
+        """,
+        (schema, table),
+    )
+    rel_row = cur.fetchone()
+    if not rel_row or rel_row[0] is None:
+        return None
+    return int(round(abs(value) * float(rel_row[0])))
+
+
+def sample_distinct_count(cur, schema, table, column, sample_size):
+    query = sql.SQL(
+        """
+        SELECT COUNT(DISTINCT value)
+        FROM (
+            SELECT {column}::text AS value
+            FROM {schema}.{table}
+            WHERE {column} IS NOT NULL
+            LIMIT %s
+        ) sample
+        """
+    ).format(
+        column=sql.Identifier(column),
+        schema=sql.Identifier(schema),
+        table=sql.Identifier(table),
+    )
+    cur.execute(query, (sample_size,))
+    row = cur.fetchone()
+    return int(row[0] or 0)
+
+
+def sample_text_too_long(cur, schema, table, column, skip_text_length, sample_size):
+    query = sql.SQL(
+        """
+        SELECT AVG(LENGTH(value))
+        FROM (
+            SELECT {column}::text AS value
+            FROM {schema}.{table}
+            WHERE {column} IS NOT NULL
+            LIMIT %s
+        ) sample
+        """
+    ).format(
+        column=sql.Identifier(column),
+        schema=sql.Identifier(schema),
+        table=sql.Identifier(table),
+    )
+    cur.execute(query, (min(sample_size, 50),))
+    row = cur.fetchone()
+    if not row or row[0] is None:
+        return False
+    return float(row[0]) > skip_text_length
+
+
+def distinct_values_for_column(cur, schema, table, column, limit):
+    query = sql.SQL(
+        """
+        SELECT DISTINCT {column}::text AS value
+        FROM {schema}.{table}
+        WHERE {column} IS NOT NULL
+        ORDER BY 1
+        LIMIT %s
+        """
+    ).format(
+        column=sql.Identifier(column),
+        schema=sql.Identifier(schema),
+        table=sql.Identifier(table),
+    )
+    cur.execute(query, (limit,))
+    return [row[0] for row in cur.fetchall()]
+
+
+def confirm_value_cache_overwrite(dataset_name, old_cache, new_cache, input_func=input):
+    old_keys = sorted((old_cache or {}).keys())
+    new_keys = sorted((new_cache or {}).keys())
+    print(
+        f"[SCAN-VALUES] dataset={dataset_name} value_cache changed: "
+        f"{len(old_keys)} -> {len(new_keys)} columns"
+    )
+    answer = input_func("Overwrite cardinality/value cache in column.yaml? [Y/n] ").strip().lower()
+    return answer in ("", "y", "yes")
+
+
+def scan_dataset_values(cur, dataset_name, dataset, settings, column_name=None, today=None):
+    sample_table = find_sample_table(cur, dataset["schema"], dataset["tables"], today=today)
+    if not sample_table:
+        return False, [f"[SCAN-VALUES] dataset={dataset_name} không tìm thấy bảng mẫu cho pattern={dataset['tables']}"]
+
+    columns = list(dataset.get("columns") or [])
+    if column_name:
+        if column_name not in columns:
+            raise RunnerConfigError(f"Cột không tồn tại trong dataset {dataset_name}: {column_name}")
+        columns = [column_name]
+
+    skip_columns = set(settings["skip_columns"])
+    threshold = settings["threshold"]
+    sample_size = settings["sample_size"]
+    skip_text_length = settings["skip_text_length"]
+    cardinality_cache = dict(dataset.get("cardinality_cache") or {})
+    value_cache = dict(dataset.get("value_cache") or {})
+    changed = False
+    messages = []
+
+    for column in columns:
+        if column in skip_columns:
+            messages.append(f"[SCAN-VALUES] dataset={dataset_name} column={column} skip configured")
+            continue
+        if sample_text_too_long(cur, dataset["schema"], sample_table, column, skip_text_length, sample_size):
+            cardinality_cache.pop(column, None)
+            value_cache.pop(column, None)
+            changed = True
+            messages.append(f"[SCAN-VALUES] dataset={dataset_name} column={column} skip text long")
+            continue
+
+        count = pg_stats_distinct(cur, dataset["schema"], sample_table, column)
+        source = "pg_stats"
+        if count is None:
+            count = sample_distinct_count(cur, dataset["schema"], sample_table, column, sample_size)
+            source = "sample"
+
+        cardinality_cache[column] = int(count)
+        if count <= threshold:
+            values = distinct_values_for_column(cur, dataset["schema"], sample_table, column, threshold + 5)
+            value_cache[column] = values[:threshold]
+            messages.append(
+                f"[SCAN-VALUES] dataset={dataset_name} column={column} distinct={count} source={source} values={len(value_cache[column])}"
+            )
+        else:
+            value_cache.pop(column, None)
+            messages.append(
+                f"[SCAN-VALUES] dataset={dataset_name} column={column} distinct={count} source={source} values=skip"
+            )
+        changed = True
+
+    dataset["cardinality_cache"] = cardinality_cache
+    dataset["value_cache"] = value_cache
+    return changed, messages
+
+
+def scan_values(column_path=None, cfg=None, dataset_name=None, column_name=None, yes=False, input_func=input, today=None):
+    path = Path(column_path or COLUMN_FILE)
+    if not path.exists():
+        create_column_skeleton(path)
+        raise RunnerConfigError(COLUMN_SETUP_MESSAGE)
+
+    raw_column_cfg = load_yaml_file(path, {})
+    original_column_cfg = copy.deepcopy(raw_column_cfg)
+    column_cfg = ensure_cardinality_schema(raw_column_cfg)
+    schema_changed = column_cfg != original_column_cfg
+    datasets = column_cfg.get("datasets") or {}
+    if not datasets:
+        raise RunnerConfigError(COLUMN_SETUP_MESSAGE)
+    settings = cardinality_settings(column_cfg)
+
+    if dataset_name:
+        if dataset_name not in datasets:
+            raise RunnerConfigError(f"Dataset không tồn tại trong column.yaml: {dataset_name}")
+        scan_names = [dataset_name]
+    else:
+        scan_names = list(datasets)
+
+    for name in scan_names:
+        dataset = datasets.get(name) or {}
+        missing = [key for key in ("database", "schema", "tables", "columns") if not dataset.get(key)]
+        if missing:
+            raise RunnerConfigError(f"Dataset {name} thiếu field: {', '.join(missing)}")
+
+    cfg = load_connection_config() if cfg is None else cfg
+    messages = []
+    updated = schema_changed
+    proposed = {}
+    for name in scan_names:
+        original = datasets[name]
+        dataset = dict(original)
+        conn = portal.connect(cfg, dataset["database"])
+        try:
+            if hasattr(conn, "set_client_encoding"):
+                conn.set_client_encoding("UTF8")
+            cur = conn.cursor()
+            try:
+                changed, dataset_messages = scan_dataset_values(
+                    cur,
+                    name,
+                    dataset,
+                    settings,
+                    column_name=column_name,
+                    today=today,
+                )
+                for message in dataset_messages:
+                    print(message)
+                    messages.append(message)
+                if changed:
+                    proposed[name] = dataset
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+
+    for name, dataset in proposed.items():
+        old_dataset = datasets[name]
+        old_value_cache = old_dataset.get("value_cache") or {}
+        old_cardinality_cache = old_dataset.get("cardinality_cache") or {}
+        cache_changed = (
+            old_value_cache != dataset.get("value_cache", {})
+            or old_cardinality_cache != dataset.get("cardinality_cache", {})
+        )
+        if cache_changed and (yes or confirm_value_cache_overwrite(name, old_value_cache, dataset.get("value_cache"), input_func)):
+            datasets[name] = dataset
+            updated = True
+        elif cache_changed:
+            message = f"[SCAN-VALUES] dataset={name} bỏ qua cập nhật cache"
+            print(message)
+            messages.append(message)
+
+    if updated:
+        column_cfg["datasets"] = datasets
+        write_yaml_file(path, column_cfg)
+        message = "[SCAN-VALUES] column.yaml đã cập nhật."
         print(message)
         messages.append(message)
     return messages
@@ -1096,7 +1389,9 @@ def parse_args(argv=None):
     parser.add_argument("--once", action="store_true", help="Chạy một vòng quét request rồi thoát")
     parser.add_argument("--make-template", action="store_true", help="Sinh request_template.xlsx từ column.yaml")
     parser.add_argument("--scan-columns", action="store_true", help="Quét DB và cập nhật column.yaml")
+    parser.add_argument("--scan-values", action="store_true", help="Quét distinct values và cập nhật column.yaml")
     parser.add_argument("--dataset", help="Chỉ scan một dataset trong column.yaml")
+    parser.add_argument("--column", help="Chỉ scan một cột khi dùng --scan-values")
     parser.add_argument("--yes", action="store_true", help="Bỏ qua confirm khi cập nhật columns")
     return parser.parse_args(argv)
 
@@ -1107,6 +1402,15 @@ def main(argv=None):
     if args.scan_columns:
         try:
             scan_columns(dataset_name=args.dataset, yes=args.yes)
+            return 0
+        except RunnerConfigError as e:
+            log_event(str(e))
+            print(str(e))
+            return 1
+
+    if args.scan_values:
+        try:
+            scan_values(dataset_name=args.dataset, column_name=args.column, yes=args.yes)
             return 0
         except RunnerConfigError as e:
             log_event(str(e))
