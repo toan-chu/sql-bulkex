@@ -142,11 +142,95 @@ Copy file `request_template.xlsx` sang folder OneDrive `inbox/` cho sales.
 
 ### 8. Bật runner nền qua Task Scheduler
 
+Runner cần chạy tự động mỗi 2 phút. Windows có sẵn Task Scheduler làm việc này — không cần cài gì thêm.
+
+#### 8.1. Tìm 2 path cần thay vào lệnh
+
+Mở **PowerShell** (Start → gõ "PowerShell" → Enter), chạy 2 lệnh:
+
 ```powershell
-schtasks /create /tn "SQL BulkEx Runner" /sc minute /mo 2 /tr "\"C:\Path\To\pythonw.exe\" \"C:\Path\To\sql-bulkex\runner.py\" --once" /f
+# Path pythonw.exe (Python chạy không hiện console)
+Get-Command pythonw | Select-Object Source
+
+# Path repo sql-bulkex
+cd "C:\Users\<TÊN_USER>\Downloads\GIT\sql-bulkex"
+$PWD.Path
 ```
 
-Dùng `pythonw.exe` để không hiện cửa sổ. Chạy 2 phút/lần.
+Ghi lại 2 kết quả in ra. Ví dụ:
+- pythonw: `C:\Users\RYAN TOAN\AppData\Local\Programs\Python\Python313\pythonw.exe`
+- repo: `C:\Users\RYAN TOAN\Downloads\GIT\sql-bulkex`
+
+> **Nếu `Get-Command pythonw` báo lỗi** — chưa cài Python hoặc chưa add vào PATH. Cài lại Python từ [python.org](https://www.python.org/downloads/), tick **"Add Python to PATH"** trong installer.
+
+#### 8.2. Tạo task chạy mỗi 2 phút
+
+Dán lệnh sau vào PowerShell, thay 2 path bằng path anh vừa lấy:
+
+```powershell
+schtasks /create /tn "SQL BulkEx Runner" /sc minute /mo 2 /tr "\"<PATH_PYTHONW>\" \"<PATH_REPO>\runner.py\" --once" /f
+```
+
+Ví dụ với path thật:
+
+```powershell
+schtasks /create /tn "SQL BulkEx Runner" /sc minute /mo 2 /tr "\"C:\Users\RYAN TOAN\AppData\Local\Programs\Python\Python313\pythonw.exe\" \"C:\Users\RYAN TOAN\Downloads\GIT\sql-bulkex\runner.py\" --once" /f
+```
+
+Ý nghĩa flag:
+
+| Flag | Ý nghĩa |
+|---|---|
+| `/tn` | Tên task (viết trong ngoặc kép nếu có dấu cách) |
+| `/sc minute /mo 2` | Chạy mỗi 2 phút |
+| `/tr` | Command chạy (pythonw + script + arg `--once`) |
+| `/f` | Force overwrite nếu task cùng tên đã tồn tại |
+
+Sau khi chạy, PowerShell in ra: `SUCCESS: The scheduled task "SQL BulkEx Runner" has successfully been created.`
+
+#### 8.3. Kiểm tra runner đang chạy
+
+```powershell
+# Xem task tồn tại
+schtasks /query /tn "SQL BulkEx Runner"
+
+# Xem log runner realtime (mỗi 2 phút phải có dòng mới nếu có request)
+Get-Content "<PATH_REPO>\log\runner.log" -Tail 20 -Wait
+# Ctrl+C để thoát
+```
+
+#### 8.4. Bật / Tắt / Xoá task
+
+```powershell
+# Chạy NGAY 1 lần (không chờ 2 phút)
+schtasks /run /tn "SQL BulkEx Runner"
+
+# TẠM DỪNG (giữ task, không chạy nữa)
+schtasks /change /tn "SQL BulkEx Runner" /disable
+
+# BẬT LẠI
+schtasks /change /tn "SQL BulkEx Runner" /enable
+
+# XOÁ HẲN
+schtasks /delete /tn "SQL BulkEx Runner" /f
+```
+
+#### 8.5. Dùng GUI thay CLI (dễ nhìn hơn)
+
+Nếu không quen PowerShell, dùng Task Scheduler GUI:
+
+1. Nhấn **`Win + R`** → gõ `taskschd.msc` → Enter
+2. Panel trái: click **Task Scheduler Library**
+3. Panel giữa: tìm dòng `SQL BulkEx Runner`
+4. Right-click → chọn: **Run** (chạy ngay) / **Disable** (tạm tắt) / **Enable** (bật lại) / **Delete** (xoá)
+5. Double-click task để xem chi tiết: tab **Triggers** (lịch chạy), **Actions** (lệnh chạy), **History** (lịch sử chạy)
+
+#### 8.6. Lưu ý thực chiến
+
+- 🖥️ **Task chỉ chạy khi user đăng nhập.** Nếu máy đăng xuất → runner dừng. Muốn chạy ngay cả khi logout → cần setup "Run whether user is logged on or not" trong GUI (yêu cầu nhập password Windows, không khuyến nghị).
+- 💤 **Máy sleep = task không chạy.** Vào **Settings → Power & sleep → Sleep = Never** cho máy giữ DB.
+- 🐛 **Debug lần đầu:** tạm thay `pythonw.exe` (silent) bằng `python.exe` (có console) trong lệnh tạo → thấy log ngay để test. Xong đổi lại `pythonw.exe` để chạy nền.
+- 📁 **Path có dấu space** như `C:\Users\RYAN TOAN\...` — schtasks parse quoted path OK, nếu lỗi thì thử copy repo sang path không có space (vd `C:\sql-bulkex\`).
 
 ---
 
