@@ -21,18 +21,19 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Si
 from openpyxl.worksheet.datavalidation import DataValidation
 
 import portal
+from operators import OperatorBuilder, OperatorRegistryError, OperatorValueError
 
 
 BASE_DIR = Path(__file__).resolve().parent
 SETTINGS_FILE = BASE_DIR / "settings.yaml"
 COLUMN_FILE = BASE_DIR / "column.yaml"
+OPERATORS_FILE = BASE_DIR / "operators.yaml"
 REQUEST_TEMPLATE_FILE = BASE_DIR / "request_template.xlsx"
 LOG_DIR = BASE_DIR / "log"
 TMP_DIR = LOG_DIR / "tmp"
 RUNNER_LOG_FILE = LOG_DIR / "runner.log"
 XLSX_ROW_LIMIT = 1_000_000
 REJECT_PREFIX = "[LOI]_"
-VALID_OPS = {"eq", "in", "prefix", "contains", "between"}
 REQUEST_V5_LABELS_ORDER = [
     "Người yêu cầu",
     "Bảng",
@@ -139,11 +140,19 @@ def load_column_config(path=None):
             if not dataset.get(key):
                 raise RunnerConfigError(f"Dataset {name} thiếu field: {key}")
     op_defaults = data.get("operator_defaults") or {}
-    valid_ops = {"eq", "in", "prefix", "contains", "between"}
+    valid_ops = load_operator_builder().valid_keys()
     for column, op in op_defaults.items():
         if op not in valid_ops:
             raise RunnerConfigError(f"operator_defaults.{column} không hợp lệ: {op}")
     return data
+
+
+def load_operator_builder(path=None):
+    path = path or OPERATORS_FILE
+    try:
+        return OperatorBuilder(path)
+    except OperatorRegistryError as e:
+        raise RunnerConfigError(str(e)) from e
 
 
 def load_connection_config():
@@ -176,25 +185,16 @@ def parse_sheet_request(sheet):
     return values
 
 
-def validate_op_value(col, op, val):
-    parts = [part.strip() for part in cell_text(val).split(",") if part.strip()]
-    if op == "eq":
-        if len(parts) != 1:
-            raise RequestError(f"Cột {col}: toán tử eq cần đúng 1 giá trị, có {len(parts)}.")
-    elif op == "between":
-        if len(parts) != 2:
-            raise RequestError(
-                f"Cột {col}: toán tử between cần đúng 2 giá trị cách dấu phẩy, có {len(parts)}."
-            )
-    elif op == "contains":
-        if len(parts) != 1:
-            raise RequestError(f"Cột {col}: toán tử contains cần 1 chuỗi, có {len(parts)}.")
-    elif op in ("in", "prefix"):
-        if len(parts) < 1:
-            raise RequestError(f"Cột {col}: toán tử {op} cần ≥1 giá trị.")
+def validate_op_value(col, op, val, op_builder=None):
+    op_builder = op_builder or load_operator_builder()
+    try:
+        op_builder.validate(col, op, val)
+    except OperatorValueError as e:
+        raise RequestError(str(e)) from e
 
 
-def parse_column_sheet(sheet, valid_cols, op_defaults):
+def parse_column_sheet(sheet, valid_cols, op_defaults, op_builder=None):
+    op_builder = op_builder or load_operator_builder()
     valid_cols = set(valid_cols)
     op_defaults = op_defaults or {}
     filters = []
@@ -209,17 +209,17 @@ def parse_column_sheet(sheet, valid_cols, op_defaults):
             warnings.append(f"Cột không hợp lệ trong sheet: {col}")
             continue
 
-        op = op.lower() if op else ""
+        op = op_builder.normalize_operator(op) if op else ""
         out = out.upper() if out else ""
-        has_op = op in VALID_OPS
+        has_op = op in op_builder.valid_keys()
         has_val = bool(val)
 
         if op and not has_op:
-            valid = ", ".join(sorted(VALID_OPS))
+            valid = ", ".join(op_builder.display_order)
             raise RequestError(f"Cột {col}: toán tử không hợp lệ '{op}'. Chỉ chấp nhận: {valid}")
 
         if has_op and has_val:
-            validate_op_value(col, op, val)
+            validate_op_value(col, op, val, op_builder)
             filters.append({"col": col, "op": op, "val": val})
             if col not in select_cols:
                 select_cols.append(col)
@@ -227,8 +227,10 @@ def parse_column_sheet(sheet, valid_cols, op_defaults):
             raise RequestError(f"Cột {col}: có toán tử '{op}' nhưng thiếu Giá trị.")
         elif not has_op and has_val:
             default_op = op_defaults.get(col)
-            if default_op and default_op in VALID_OPS:
-                validate_op_value(col, default_op, val)
+            if default_op:
+                default_op = op_builder.normalize_operator(default_op)
+            if default_op and default_op in op_builder.valid_keys():
+                validate_op_value(col, default_op, val, op_builder)
                 filters.append({"col": col, "op": default_op, "val": val})
                 if col not in select_cols:
                     select_cols.append(col)
@@ -591,13 +593,9 @@ def is_v5_request_file(path):
         wb.close()
 
 
-def normalize_v5_filter_value(op, val):
-    if op in ("prefix", "in"):
-        return split_values(val)
-    if op == "between":
-        parts = split_values(val)
-        return (parts[0], parts[1])
-    return cell_text(val)
+def normalize_v5_filter_value(op, val, op_builder=None):
+    op_builder = op_builder or load_operator_builder()
+    return op_builder.portal_value(op, val)
 
 
 def note_rows_v5(parsed, missing_tables):
@@ -619,6 +617,7 @@ def note_rows_v5(parsed, missing_tables):
 
 
 def build_jobs_from_v5_request(parsed, cur):
+    op_builder = load_operator_builder()
     req = parsed["request"]
     dataset = parsed["dataset"]
     schema = dataset["schema"]
@@ -639,7 +638,7 @@ def build_jobs_from_v5_request(parsed, cur):
         raise RequestError(f"Cột không có trong bảng đã chọn: {', '.join(sorted(set(bad)))}. Cột hợp lệ: {valid}")
 
     filters = [
-        (item["col"], item["op"], normalize_v5_filter_value(item["op"], item["val"]))
+        (item["col"], item["op"], normalize_v5_filter_value(item["op"], item["val"], op_builder))
         for item in parsed["filters"]
     ]
     state = {

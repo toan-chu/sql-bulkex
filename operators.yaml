@@ -1,0 +1,69 @@
+operators:
+  eq:
+    display: "Bằng"
+    hint: "1 giá trị"
+    example: "CN"
+    sql_single: "{col} = {val}"
+    sql_multi: "{col} = ANY({vals})"
+    multi_value: true
+    arity:
+    supports_digits: false
+
+  in:
+    display: "Trong danh sách"
+    hint: "Nhiều giá trị, cách phẩy"
+    example: "CN, KR, JP"
+    sql_multi: "{col} = ANY({vals})"
+    multi_value: true
+    arity:
+    supports_digits: false
+
+  between:
+    display: "Trong khoảng"
+    hint: "Đúng 2 giá trị, cách phẩy"
+    example: "1000, 5000"
+    sql_multi: "{col} BETWEEN {v1} AND {v2}"
+    multi_value: true
+    arity: 2
+    supports_digits: false
+
+  prefix:
+    display: "Bắt đầu bằng"
+    hint: "1 hoặc nhiều prefix, cách phẩy"
+    example: "84, 85"
+    sql_single: "{col} LIKE {val_prefix}"
+    sql_multi: "({col} LIKE ANY({vals_prefix}))"
+    sql_single_with_digits: "{col} LIKE {val_prefix} AND LENGTH({col}) = {digits}"
+    sql_multi_with_digits: "({col} LIKE ANY({vals_prefix})) AND LENGTH({col}) = {digits}"
+    multi_value: true
+    arity:
+    supports_digits: true
+
+  contains:
+    display: "Chứa"
+    hint: "1 chuỗi"
+    example: "laptop"
+    sql_single: "{col} LIKE {val_contains}"
+    multi_value: false
+    arity: 1
+    supports_digits: false
+
+  suffix:
+    display: "Kết thúc bằng"
+    hint: "1 hoặc nhiều suffix, cách phẩy"
+    example: "AA, BB"
+    sql_single: "{col} LIKE {val_suffix}"
+    sql_multi: "({col} LIKE ANY({vals_suffix}))"
+    sql_single_with_digits: "{col} LIKE {val_suffix} AND LENGTH({col}) = {digits}"
+    sql_multi_with_digits: "({col} LIKE ANY({vals_suffix})) AND LENGTH({col}) = {digits}"
+    multi_value: true
+    arity:
+    supports_digits: true
+
+display_order:
+  - eq
+  - in
+  - between
+  - prefix
+  - contains
+  - suffix
