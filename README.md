@@ -1,5 +1,11 @@
 # 📊 SQL BulkEx v6
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D6.svg?logo=windows&logoColor=white)](https://www.microsoft.com/windows)
+[![Tests](https://img.shields.io/badge/tests-103%20passed-brightgreen.svg)](tests/)
+
 > **Công cụ xuất dữ liệu hàng loạt từ PostgreSQL — không cần biết SQL.**
 > Sales/MKT điền file Excel request → nhắn admin duyệt → runner tự chạy → file kết quả xuất hiện trong OneDrive.
 
