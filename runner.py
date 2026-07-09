@@ -40,6 +40,18 @@ XLSX_ROW_LIMIT = 1_000_000
 REJECT_PREFIX = "[LOI]_"
 DONE_PREFIX = "[DONE] "
 DONE_TIMESTAMP_PREFIX = "[DONE "
+REQUEST_LOG_HEADER = [
+    "timestamp",
+    "requester_cell",
+    "requester_meta",
+    "file_name",
+    "dataset",
+    "row_count",
+    "duration_sec",
+    "status",
+    "output_file",
+    "error",
+]
 REQUEST_V5_LABELS_ORDER = [
     "Người yêu cầu",
     "Bảng",
@@ -132,6 +144,28 @@ class RunnerConfigError(Exception):
     """A runner startup config problem."""
 
 
+class RequestProcessResult:
+    def __init__(self, request_file, dataset="", row_count=0, output_file=""):
+        self.request_file = Path(request_file)
+        self.dataset = dataset
+        self.row_count = int(row_count or 0)
+        self.output_file = output_file or ""
+
+    @property
+    def parent(self):
+        return self.request_file.parent
+
+    @property
+    def name(self):
+        return self.request_file.name
+
+    def __fspath__(self):
+        return str(self.request_file)
+
+    def __str__(self):
+        return str(self.request_file)
+
+
 def configure_stdio():
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -181,6 +215,11 @@ def load_settings(path=None):
     log_cfg.update(data.get("log") or {})
     merged["log"] = log_cfg
     return merged
+
+
+def request_log_path(settings):
+    log_cfg = settings.get("log") or {}
+    return Path(log_cfg.get("requests_csv") or DEFAULT_SETTINGS["log"]["requests_csv"])
 
 
 def write_yaml_file(path, data):
@@ -281,6 +320,73 @@ def parse_sheet_request(sheet):
         if key:
             values[key] = cell_text(row[1])
     return values
+
+
+def extract_requester_info(path):
+    path = Path(path)
+    try:
+        wb = load_workbook(path, data_only=True, read_only=True)
+    except Exception as e:
+        log_event(f"Không đọc được metadata requester {path.name}: {e}")
+        return {"requester_cell": "", "requester_meta": "", "requester": "unknown"}
+    try:
+        requester_meta = cell_text(getattr(wb.properties, "lastModifiedBy", ""))
+        requester_cell = ""
+        if "Request" in wb.sheetnames:
+            requester_cell = cell_text(wb["Request"]["B1"].value)
+        requester = requester_cell or requester_meta or "unknown"
+        return {
+            "requester_cell": requester_cell,
+            "requester_meta": requester_meta,
+            "requester": requester,
+        }
+    finally:
+        wb.close()
+
+
+def log_request_csv(
+    settings,
+    ts_start,
+    requester_cell="",
+    requester_meta="",
+    file_name="",
+    dataset="",
+    row_count=0,
+    duration_sec=0,
+    status="",
+    output_file="",
+    error="",
+):
+    path = request_log_path(settings)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = dt.datetime.fromtimestamp(ts_start).isoformat(timespec="seconds")
+    row = {
+        "timestamp": timestamp,
+        "requester_cell": requester_cell or "",
+        "requester_meta": requester_meta or "",
+        "file_name": file_name or "",
+        "dataset": dataset or "",
+        "row_count": int(row_count or 0),
+        "duration_sec": f"{float(duration_sec or 0):.3f}",
+        "status": status or "",
+        "output_file": output_file or "",
+        "error": error or "",
+    }
+    for attempt in range(3):
+        try:
+            needs_header = not path.exists() or path.stat().st_size == 0
+            with open(path, "a", newline="", encoding="utf-8-sig") as f:
+                writer = csv.DictWriter(f, fieldnames=REQUEST_LOG_HEADER)
+                if needs_header:
+                    writer.writeheader()
+                writer.writerow(row)
+            return True
+        except PermissionError as e:
+            if attempt < 2:
+                time.sleep(1)
+                continue
+            log_event(f"[REQUEST_LOG] Không ghi được {path}: {e}")
+            return False
 
 
 def validate_op_value(col, op, val, op_builder=None):
@@ -1448,7 +1554,7 @@ def process_request_file_v6(path, cfg, conns, settings, column_cfg):
         log_event(f"Exported {final.name}: {counts}")
         moved = mark_done(path)
         log_event(f"Processed request {path.name} -> {moved}")
-        return moved
+        return RequestProcessResult(moved, dataset="both", row_count=sum(counts.values()), output_file=final.name)
 
     dataset_name = parsed.get("bang") or parsed.get("dataset_name")
     result = prepare_v6_dataset_jobs(dataset_name, parsed, request, cfg, conns, settings, op_builder)
@@ -1458,6 +1564,8 @@ def process_request_file_v6(path, cfg, conns, settings, column_cfg):
     base_notes = result["notes"]
     columns = result["columns"]
     rows_by_job = result["rows_by_job"]
+    exported_total = 0
+    output_files = []
     for index, job in enumerate(jobs):
         name, _dbname, query, params = job
         rows = rows_by_job[index]
@@ -1484,10 +1592,17 @@ def process_request_file_v6(path, cfg, conns, settings, column_cfg):
         if txt_src and txt_src.exists():
             move_finished_file(txt_src, final.with_suffix(".txt"))
         log_event(f"Exported {final.name}: {exported} rows")
+        exported_total += exported
+        output_files.append(final.name)
 
     moved = mark_done(path)
     log_event(f"Processed request {path.name} -> {moved}")
-    return moved
+    return RequestProcessResult(
+        moved,
+        dataset=dataset_name,
+        row_count=exported_total,
+        output_file=";".join(output_files),
+    )
 
 
 def process_request_file(path, cfg, conns, settings):
@@ -1597,6 +1712,12 @@ def cleanup_onedrive(settings=None, now=None):
     return {"freed": freed, "skipped": skipped, "failed": failed}
 
 
+def process_result_field(result, field, default=""):
+    if isinstance(result, dict):
+        return result.get(field, default)
+    return getattr(result, field, default)
+
+
 def run_once(settings=None, cfg=None, stable_wait=5):
     settings = load_settings() if settings is None else settings
     if settings.get("_deprecated_v5_schema"):
@@ -1606,17 +1727,61 @@ def run_once(settings=None, cfg=None, stable_wait=5):
     processed = 0
     try:
         for path in request_files(settings, stable_wait=stable_wait):
+            ts_start = time.time()
+            requester_info = extract_requester_info(path)
             try:
-                process_request_file(path, cfg, conns, settings)
+                result = process_request_file(path, cfg, conns, settings)
+                duration = time.time() - ts_start
+                log_request_csv(
+                    settings,
+                    ts_start,
+                    requester_info["requester_cell"],
+                    requester_info["requester_meta"],
+                    path.name,
+                    process_result_field(result, "dataset"),
+                    process_result_field(result, "row_count", 0),
+                    duration,
+                    "success",
+                    process_result_field(result, "output_file"),
+                    "",
+                )
                 processed += 1
             except psycopg2.OperationalError as e:
                 log_event(f"DB down, giữ request {path.name}: {e}")
             except RequestError as e:
                 moved = move_to_error(path, str(e))
                 log_event(f"Request lỗi {path.name} -> {moved}: {e}")
+                duration = time.time() - ts_start
+                log_request_csv(
+                    settings,
+                    ts_start,
+                    requester_info["requester_cell"],
+                    requester_info["requester_meta"],
+                    path.name,
+                    "",
+                    0,
+                    duration,
+                    "rejected",
+                    "",
+                    str(e),
+                )
             except Exception as e:
                 moved = move_to_error(path, f"Lỗi xử lý request: {e}")
                 log_event(f"Unexpected error {path.name} -> {moved}: {e}")
+                duration = time.time() - ts_start
+                log_request_csv(
+                    settings,
+                    ts_start,
+                    requester_info["requester_cell"],
+                    requester_info["requester_meta"],
+                    path.name,
+                    "",
+                    0,
+                    duration,
+                    "error",
+                    "",
+                    str(e),
+                )
     finally:
         for conn in conns.values():
             try:
