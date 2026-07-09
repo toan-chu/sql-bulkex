@@ -179,7 +179,7 @@ Ghi lại 2 kết quả in ra. Ví dụ:
 
 > **Nếu `Get-Command pythonw` báo lỗi** — chưa cài Python hoặc chưa add vào PATH. Cài lại Python từ [python.org](https://www.python.org/downloads/), tick **"Add Python to PATH"** trong installer.
 
-#### 8.2. Tạo task chạy mỗi 2 phút
+#### 8.2. Tạo task runner chạy mỗi 2 phút
 
 Dán lệnh sau vào PowerShell, thay 2 path bằng path anh vừa lấy:
 
@@ -204,11 +204,28 @@ schtasks /create /tn "SQL BulkEx Runner" /sc minute /mo 2 /tr "\"C:\Users\RYAN T
 
 Sau khi chạy, PowerShell in ra: `SUCCESS: The scheduled task "SQL BulkEx Runner" has successfully been created.`
 
-#### 8.3. Kiểm tra runner đang chạy
+#### 8.3. Tạo task cleanup chạy mỗi 1 giờ
+
+Task cleanup chuyển file `[DONE]` cũ và output cũ sang trạng thái cloud-only của OneDrive Files On-Demand, giúp máy admin không phình dung lượng.
+
+```powershell
+schtasks /create /tn "SQL-BulkEx-Cleanup" /sc hourly /mo 1 /tr "\"<PATH_PYTHONW>\" \"<PATH_REPO>\runner.py\" --cleanup" /st 00:30 /f
+```
+
+Ví dụ với path thật:
+
+```powershell
+schtasks /create /tn "SQL-BulkEx-Cleanup" /sc hourly /mo 1 /tr "\"C:\Users\RYAN TOAN\AppData\Local\Programs\Python\Python313\pythonw.exe\" \"C:\Users\RYAN TOAN\Downloads\GIT\sql-bulkex\runner.py\" --cleanup" /st 00:30 /f
+```
+
+Cleanup đọc `settings.yaml -> onedrive_freeup`. Nếu `enabled: false`, lệnh thoát thành công và không đụng file nào.
+
+#### 8.4. Kiểm tra runner đang chạy
 
 ```powershell
 # Xem task tồn tại
 schtasks /query /tn "SQL BulkEx Runner"
+schtasks /query /tn "SQL-BulkEx-Cleanup"
 
 # Runner chỉ poll folder settings.yaml -> folders.approved
 # File ở 01_Pending phải chờ admin kéo sang 02_Approved.
@@ -218,33 +235,37 @@ Get-Content "<PATH_REPO>\log\runner.log" -Tail 20 -Wait
 # Ctrl+C để thoát
 ```
 
-#### 8.4. Bật / Tắt / Xoá task
+#### 8.5. Bật / Tắt / Xoá task
 
 ```powershell
 # Chạy NGAY 1 lần (không chờ 2 phút)
 schtasks /run /tn "SQL BulkEx Runner"
+schtasks /run /tn "SQL-BulkEx-Cleanup"
 
 # TẠM DỪNG (giữ task, không chạy nữa)
 schtasks /change /tn "SQL BulkEx Runner" /disable
+schtasks /change /tn "SQL-BulkEx-Cleanup" /disable
 
 # BẬT LẠI
 schtasks /change /tn "SQL BulkEx Runner" /enable
+schtasks /change /tn "SQL-BulkEx-Cleanup" /enable
 
 # XOÁ HẲN
 schtasks /delete /tn "SQL BulkEx Runner" /f
+schtasks /delete /tn "SQL-BulkEx-Cleanup" /f
 ```
 
-#### 8.5. Dùng GUI thay CLI (dễ nhìn hơn)
+#### 8.6. Dùng GUI thay CLI (dễ nhìn hơn)
 
 Nếu không quen PowerShell, dùng Task Scheduler GUI:
 
 1. Nhấn **`Win + R`** → gõ `taskschd.msc` → Enter
 2. Panel trái: click **Task Scheduler Library**
-3. Panel giữa: tìm dòng `SQL BulkEx Runner`
+3. Panel giữa: tìm dòng `SQL BulkEx Runner` hoặc `SQL-BulkEx-Cleanup`
 4. Right-click → chọn: **Run** (chạy ngay) / **Disable** (tạm tắt) / **Enable** (bật lại) / **Delete** (xoá)
 5. Double-click task để xem chi tiết: tab **Triggers** (lịch chạy), **Actions** (lệnh chạy), **History** (lịch sử chạy)
 
-#### 8.6. Lưu ý thực chiến
+#### 8.7. Lưu ý thực chiến
 
 - 🖥️ **Task chỉ chạy khi user đăng nhập.** Nếu máy đăng xuất → runner dừng. Muốn chạy ngay cả khi logout → cần setup "Run whether user is logged on or not" trong GUI (yêu cầu nhập password Windows, không khuyến nghị).
 - 💤 **Máy sleep = task không chạy.** Vào **Settings → Power & sleep → Sleep = Never** cho máy giữ DB.

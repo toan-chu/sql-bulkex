@@ -7,6 +7,7 @@ import csv
 import datetime as dt
 import os
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -1531,6 +1532,71 @@ def request_files(settings, stable_wait=5):
     return request_files_v6(settings, stable_wait=stable_wait)
 
 
+def done_cleanup_candidates(settings, now=None):
+    root = approved_dir(settings)
+    freeup_cfg = settings.get("onedrive_freeup") or {}
+    delay_hours = float(freeup_cfg.get("approved_delay_hours", DEFAULT_SETTINGS["onedrive_freeup"]["approved_delay_hours"]))
+    cutoff = (now or time.time()) - (delay_hours * 3600)
+    for path in sorted(root.glob("*.xlsx")):
+        if not (path.name.startswith(DONE_PREFIX) or path.name.startswith(DONE_TIMESTAMP_PREFIX)):
+            continue
+        yield path, path.stat().st_mtime <= cutoff
+
+
+def output_cleanup_candidates(settings, now=None):
+    root = output_dir(settings)
+    freeup_cfg = settings.get("onedrive_freeup") or {}
+    delay_days = float(freeup_cfg.get("output_delay_days", DEFAULT_SETTINGS["onedrive_freeup"]["output_delay_days"]))
+    cutoff = (now or time.time()) - (delay_days * 24 * 3600)
+    for path in sorted(root.glob("*.xlsx")):
+        yield path, path.stat().st_mtime <= cutoff
+
+
+def free_up_space(path: Path) -> bool:
+    path = Path(path)
+    try:
+        subprocess.run(["attrib", "+U", "-P", str(path)], check=True, capture_output=True, timeout=10)
+        log_event(f"[FREEUP] OK {path.name}")
+        return True
+    except FileNotFoundError:
+        log_event(f"[FREEUP] SKIP {path.name}: 'attrib' not found (non-Windows?)")
+        return False
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode(errors="ignore") if isinstance(e.stderr, bytes) else str(e.stderr or "")
+        log_event(f"[FREEUP] FAIL {path.name}: exit {e.returncode} - {stderr}")
+        return False
+    except subprocess.TimeoutExpired:
+        log_event(f"[FREEUP] TIMEOUT {path.name}: attrib > 10s")
+        return False
+
+
+def cleanup_onedrive(settings=None, now=None):
+    settings = load_settings() if settings is None else settings
+    freeup_cfg = settings.get("onedrive_freeup") or {}
+    if freeup_cfg.get("enabled") is False:
+        message = "OneDrive free up disabled in settings"
+        print(message)
+        log_event(message)
+        return {"freed": 0, "skipped": 0, "failed": 0}
+
+    freed = 0
+    skipped = 0
+    failed = 0
+    for path, ready in list(done_cleanup_candidates(settings, now=now)) + list(output_cleanup_candidates(settings, now=now)):
+        if not ready:
+            skipped += 1
+            continue
+        if free_up_space(path):
+            freed += 1
+        else:
+            failed += 1
+
+    message = f"[FREEUP] done: freed={freed} skipped={skipped} failed={failed}"
+    print(message)
+    log_event(message)
+    return {"freed": freed, "skipped": skipped, "failed": failed}
+
+
 def run_once(settings=None, cfg=None, stable_wait=5):
     settings = load_settings() if settings is None else settings
     if settings.get("_deprecated_v5_schema"):
@@ -1903,6 +1969,7 @@ def parse_args(argv=None):
     parser.add_argument("--make-template", action="store_true", help="Sinh request_template.xlsx từ column.yaml")
     parser.add_argument("--scan-columns", action="store_true", help="Quét DB và cập nhật column.yaml")
     parser.add_argument("--scan-values", action="store_true", help="Quét distinct values và cập nhật column.yaml")
+    parser.add_argument("--cleanup", action="store_true", help="Free up OneDrive space cho file DONE/output cũ")
     parser.add_argument("--dataset", help="Chỉ scan một dataset trong column.yaml")
     parser.add_argument("--column", help="Chỉ scan một cột khi dùng --scan-values")
     parser.add_argument("--yes", action="store_true", help="Bỏ qua confirm khi cập nhật columns")
@@ -1924,6 +1991,15 @@ def main(argv=None):
     if args.scan_values:
         try:
             scan_values(dataset_name=args.dataset, column_name=args.column, yes=args.yes)
+            return 0
+        except RunnerConfigError as e:
+            log_event(str(e))
+            print(str(e))
+            return 1
+
+    if args.cleanup:
+        try:
+            cleanup_onedrive(load_settings())
             return 0
         except RunnerConfigError as e:
             log_event(str(e))
