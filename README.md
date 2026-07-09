@@ -1,415 +1,321 @@
-# 📊 SQL BulkEx
+# SQL BulkEx v6
 
-> **Export PostgreSQL data through Excel — no SQL required.**
-> Xuất dữ liệu PostgreSQL qua Excel — không cần viết SQL.
+Bulk export tool for PostgreSQL customs datasets. Sales creates an Excel request, admin approves by moving the file between OneDrive folders, and the runner exports data without opening a UI.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-brightgreen.svg)](https://www.python.org)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-supported-336791.svg)](https://www.postgresql.org)
+Cong cu xuat du lieu hang loat tu PostgreSQL. Sales dien file Excel request, admin phe duyet bang cach keo file trong OneDrive, runner tu dong xuat file ket qua.
 
 ---
 
-## 🎯 Vấn đề giải quyết
-
-Doanh nghiệp có 1 người biết SQL (thường là data analyst / IT). Cả team sales/marketing/vận hành cần data lẻ tẻ mỗi ngày → nghẽn 1 người, chờ đợi, mệt cả 2 phía.
-
-**SQL BulkEx tách nút thắt đó:**
-
-- 👤 **Sales/MKT** điền request qua Excel (chọn cột, điền giá trị, thả vào OneDrive)
-- 🖥️ **Máy giữ DB** tự đọc request, query, xuất Excel/CSV về OneDrive
-- 📁 **Không server, không mở port, không API cloud** — chỉ dùng folder sync sẵn có
-
----
-
-## ✨ Điểm chính
-
-| Tính năng | Mô tả |
-|---|---|
-| 🎯 **Column-based filter** | Chọn cột từ danh sách thật quét từ DB, không hardcode template |
-| 📋 **5 toán tử** | `eq` / `in` / `prefix` / `contains` / `between` |
-| 🔮 **Auto-default operator** | HS code auto `prefix`, MST auto `prefix` (10 và 13 số), mô tả auto `contains` |
-| 📅 **Multi-year** | `2025,2026` hoặc `2025-2026` — cross-product với tháng |
-| 🗂️ **Excel 4 sheet** | Request → Cột Export → Cột Import → Tham chiếu |
-| 🚫 **Reject in-place** | File lỗi rename `[LOI]_*.xlsx` + `.txt` giải thích, ngay tại folder user thả |
-| 🔒 **Password local-only** | `.password` gitignored, không đụng cloud |
-| ⚙️ **Task Scheduler** | Chạy nền `pythonw.exe`, không hiện console |
-
----
-
-## 🏗️ Kiến trúc
-
-```
-┌─────────────────┐       ┌──────────────────┐       ┌─────────────────┐
-│  Sales / MKT    │       │   OneDrive /     │       │  Máy giữ DB     │
-│                 │       │   Google Drive   │       │  (Admin)        │
-│  📄 Excel       │       │                  │       │                 │
-│  request        │──────►│  📁 inbox/       │──────►│  🐍 runner.py   │
-│                 │       │                  │       │                 │
-└─────────────────┘       │  📁 results/     │◄──────│  🗄️ PostgreSQL  │
-                          │                  │       │                 │
-                          └──────────────────┘       └─────────────────┘
-```
-
-**Không tunnel, không API, không port.** Nút chai là folder sync — sales bỏ Excel, admin's runner đọc, xuất kết quả về folder cùng sync.
-
----
-
-## 🚀 Cài đặt cho Admin
-
-**Yêu cầu:** Python 3.9+, PostgreSQL local truy cập được.
-
-### 1. Clone và cài dependency
+## 1. Quick Start / Bat Dau Nhanh
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/sql-bulkex.git
-cd sql-bulkex
-python -m pip install -r requirements.txt
-```
-
-### 2. Cấu hình kết nối
-
-Sửa `connection.yaml` (giữ password rỗng để commit an toàn):
-
-```yaml
-host: localhost
-port: 5432
-user: postgres
-password: ""
-maintenance_db: postgres
-```
-
-Tạo `.password` cạnh `runner.py` (đã có trong `.gitignore`):
-
-```powershell
-Set-Content .password "mat_khau_postgres"
-```
-
-### 3. Điền `column.yaml` với thông tin DB
-
-```yaml
-datasets:
-  export:
-    database: vn_export
-    schema: vietnam_export
-    tables: "x_y{year}_{month}"     # placeholder {year} {month}
-    columns: []                       # để trống, sẽ auto-fill ở bước sau
-  import:
-    database: vn_import
-    schema: vietnam_import
-    tables: "i_y{year}_{month}"
-    columns: []
-```
-
-### 4. Quét cột thật từ DB
-
-```powershell
+cd C:\path\to\sql-bulkex
 python runner.py --scan-columns --yes
+python runner.py --scan-values --yes
+python runner.py --make-template
+python runner.py --once
 ```
 
-Runner tìm bảng mẫu gần nhất, đọc `information_schema.columns`, ghi vào `column.yaml`.
+Main files:
 
-### 5. (Tuỳ chọn) Thêm operator defaults
+| File | Purpose |
+|---|---|
+| `connection.yaml` | PostgreSQL connection config, no password committed |
+| `.password` | Local ignored DB password |
+| `column.yaml` | Dataset schemas, scanned columns, cardinality/value cache |
+| `operators.yaml` | 6 registry operators, no operator hardcode |
+| `settings.yaml` | Folder paths, thresholds, cleanup/log paths |
+| `request_template.xlsx` | Excel template for users |
+| `log/requests.csv` | Structured request history |
 
-Sales sẽ ít phải chọn toán tử hơn nếu admin set default sẵn:
+---
 
-```yaml
-operator_defaults:
-  ma_nguoi_xuat_khau: prefix       # MST — cover cả 10 và 13 số
-  ma_nguoi_nhap_khau: prefix
-  ma_so_hang_hoa: prefix           # HS code — user hay tra theo nhóm
-  mo_ta_hang_hoa: contains
-  ten_nguoi_xuat_khau: contains
-  ten_nguoi_nhap_khau: contains
+## 2. Three-Folder OneDrive Approval / Quy Trinh 3 Folder
+
+v6 does not use `inbox/processed`. Approval is visual and simple:
+
+```text
+SQL-BulkEx-Workspace/
+  01_Pending/    Sales uploads request here
+  02_Approved/   Admin moves approved files here
+  03_Output/     Runner writes result files here
 ```
 
-### 6. Trỏ folder OneDrive/GDrive trong `settings.yaml`
+VN flow:
+
+1. Sales dien `request_template.xlsx`.
+2. Sales upload file vao `01_Pending/`.
+3. Sales nhan Zalo/admin: "Em da gui request, nho anh/chị approve".
+4. Admin review nhanh va keo file sang `02_Approved/`.
+5. Runner chi scan `02_Approved/`, khong scan `01_Pending/`.
+6. Thanh cong: file request duoc rename thanh `[DONE] original.xlsx` cung folder.
+7. Loi request: file duoc rename `[LOI]_original.xlsx` va co file `.txt` giai thich.
+8. Ket qua nam trong `03_Output/`.
+
+EN flow:
+
+1. Requester fills `request_template.xlsx`.
+2. Requester uploads to `01_Pending/`.
+3. Admin approves by moving the file to `02_Approved/`.
+4. Runner processes approved files only.
+5. Done files are renamed in place with `[DONE] `.
+6. Rejected files are renamed in place with `[LOI]_` plus a companion `.txt`.
+7. Output files appear in `03_Output/`.
+
+Example `settings.yaml`:
 
 ```yaml
 folders:
-  pending: "C:/Users/xxx/OneDrive/SQL-BulkEx-Workspace/01_Pending"
-  approved: "C:/Users/xxx/OneDrive/SQL-BulkEx-Workspace/02_Approved"
-  output: "C:/Users/xxx/OneDrive/SQL-BulkEx-Workspace/03_Output"
-poll_seconds: 120
-max_rows_auto: 300000
-max_rows_hard: 3000000
+  pending: "C:/Users/admin/OneDrive/SQL-BulkEx-Workspace/01_Pending"
+  approved: "C:/Users/admin/OneDrive/SQL-BulkEx-Workspace/02_Approved"
+  output: "C:/Users/admin/OneDrive/SQL-BulkEx-Workspace/03_Output"
+
 onedrive_freeup:
   enabled: true
   approved_delay_hours: 2
   output_delay_days: 7
+
 log:
   requests_csv: "log/requests.csv"
   runner_log: "log/runner.log"
   portal_log: "log/portal.log"
 ```
 
-Workflow:
-- Sales copy file request vào `01_Pending`.
-- Admin review rồi kéo file sang `02_Approved`.
-- Runner chỉ quét `02_Approved`; file ở `01_Pending` không bị xử lý.
-- Kết quả xuất ra `03_Output`.
+Backward compatibility: old `input_dir` / `output_dir` settings still run with a deprecation warning.
 
-### 7. Sinh Excel template cho sales
+---
 
-```powershell
-python runner.py --make-template
+## 3. Excel Request Template / Mau Excel
+
+`python runner.py --make-template` creates a v6 workbook with 5 sheets:
+
+| Sheet | Purpose |
+|---|---|
+| `Request` | requester, dataset, year/month, both/export/import, request name |
+| `Cột Export` | export filters and output columns |
+| `Cột Import` | import filters and output columns |
+| `Values` | hidden low-cardinality dropdown values |
+| `Tham chiếu` | operator and usage reference |
+
+`Request` supports:
+
+| Field | Example |
+|---|---|
+| Người yêu cầu | Hoa |
+| Bảng | `export`, `import`, or `both` |
+| Năm | `2026`, `2025,2026`, `2025-2026` |
+| Tháng | `06`, `01-03`, `01,03,12` |
+| Tách file theo | optional |
+| Xác nhận lớn | `YES` for large exports |
+| Ghi chú / tên request | short output name |
+| Người duyệt | optional admin note |
+
+---
+
+## 4. Six Operators / 6 Toan Tu
+
+v6 uses one input cell per operator. There is no old single `Toán tử` dropdown column.
+
+| VN label | Code | Example | SQL meaning |
+|---|---|---|---|
+| Bằng | `eq` | `CN` | equals |
+| Trong danh sách | `in` | `CN, KR, JP` | any of list |
+| Trong khoảng | `between` | `1000, 5000` | inclusive range |
+| Bắt đầu bằng | `prefix` | `8471` | `LIKE '8471%'` |
+| Chứa | `contains` | `laptop, gaming` | contains any text |
+| Kết thúc bằng | `suffix` | `0010` | `LIKE '%0010'` |
+
+All operator SQL is built by `operators.yaml` + `operators.py`. Adding a future operator should be a registry change, not a runner rewrite.
+
+---
+
+## 5. Combine Operators On One Column / Gop Nhieu Dieu Kien Cung Cot
+
+Because each operator is a separate cell, one row can hold multiple conditions on the same column. They combine with `AND`.
+
+Example:
+
+| Cột | Bắt đầu bằng | Kết thúc bằng | Digits |
+|---|---:|---:|---:|
+| `ma_so_hang_hoa` | `84` | `10` | |
+
+Meaning:
+
+```sql
+ma_so_hang_hoa LIKE '84%' AND ma_so_hang_hoa LIKE '%10'
 ```
 
-Copy file `request_template.xlsx` sang folder OneDrive `01_Pending/` cho sales.
+Use this for HS code patterns, suffix matching, or narrowing a text-like code without writing SQL.
 
-### 8. Bật runner nền qua Task Scheduler
+---
 
-Runner cần chạy tự động mỗi 2 phút. Windows có sẵn Task Scheduler làm việc này — không cần cài gì thêm.
+## 6. Digits
 
-#### 8.1. Tìm 2 path cần thay vào lệnh
+Digits is a validation aid for `Bắt đầu bằng` and `Kết thúc bằng`.
 
-Mở **PowerShell** (Start → gõ "PowerShell" → Enter), chạy 2 lệnh:
+Important: Digits validates the length of the value you type. It does not add `LENGTH(column)` to SQL.
+
+Examples:
+
+| Case | Result |
+|---|---|
+| `Bắt đầu bằng=8471`, `Digits=4` | accepted, SQL `LIKE '8471%'` |
+| `Bắt đầu bằng=84`, `Digits=4` | rejected because `84` has 2 characters |
+| `Kết thúc bằng=0010`, `Digits=4` | accepted, SQL `LIKE '%0010'` |
+| `Bằng=CN`, `Digits=4` | Digits ignored with warning |
+
+MST examples:
+
+| MST need | How to enter |
+|---|---|
+| MST 10 digits prefix | `Bắt đầu bằng=0301234567`, `Digits=10` |
+| MST 13 digits prefix | `Bắt đầu bằng=0301234567890`, `Digits=13` |
+
+---
+
+## 7. Cardinality Values / Dropdown Gia Tri
+
+Run:
 
 ```powershell
-# Path pythonw.exe (Python chạy không hiện console)
-Get-Command pythonw | Select-Object Source
-
-# Path repo sql-bulkex
-cd "C:\Users\<TÊN_USER>\Downloads\GIT\sql-bulkex"
-$PWD.Path
+python runner.py --scan-values --yes
 ```
 
-Ghi lại 2 kết quả in ra. Ví dụ:
-- pythonw: `C:\Users\RYAN TOAN\AppData\Local\Programs\Python\Python313\pythonw.exe`
-- repo: `C:\Users\RYAN TOAN\Downloads\GIT\sql-bulkex`
+The runner reads PostgreSQL stats first, then falls back to sampled distinct values. Low-cardinality columns are stored in `column.yaml`:
 
-> **Nếu `Get-Command pythonw` báo lỗi** — chưa cài Python hoặc chưa add vào PATH. Cài lại Python từ [python.org](https://www.python.org/downloads/), tick **"Add Python to PATH"** trong installer.
+```yaml
+cardinality_cache:
+  ma_nuoc: 5
+value_cache:
+  ma_nuoc: [CN, JP, KR, US, VN]
+```
 
-#### 8.2. Tạo task runner chạy mỗi 2 phút
+When the template is regenerated, low-cardinality values go into hidden sheet `Values`, and operator cells such as `Bằng` / `Trong danh sách` get named-range dropdowns.
 
-Dán lệnh sau vào PowerShell, thay 2 path bằng path anh vừa lấy:
+---
+
+## 8. Task Scheduler: 2 Tasks
+
+Use `pythonw.exe` for silent background runs.
+
+Task 1: process approved requests every 2 minutes.
 
 ```powershell
 schtasks /create /tn "SQL BulkEx Runner" /sc minute /mo 2 /tr "\"<PATH_PYTHONW>\" \"<PATH_REPO>\runner.py\" --once" /f
 ```
 
-Ví dụ với path thật:
-
-```powershell
-schtasks /create /tn "SQL BulkEx Runner" /sc minute /mo 2 /tr "\"C:\Users\RYAN TOAN\AppData\Local\Programs\Python\Python313\pythonw.exe\" \"C:\Users\RYAN TOAN\Downloads\GIT\sql-bulkex\runner.py\" --once" /f
-```
-
-Ý nghĩa flag:
-
-| Flag | Ý nghĩa |
-|---|---|
-| `/tn` | Tên task (viết trong ngoặc kép nếu có dấu cách) |
-| `/sc minute /mo 2` | Chạy mỗi 2 phút |
-| `/tr` | Command chạy (pythonw + script + arg `--once`) |
-| `/f` | Force overwrite nếu task cùng tên đã tồn tại |
-
-Sau khi chạy, PowerShell in ra: `SUCCESS: The scheduled task "SQL BulkEx Runner" has successfully been created.`
-
-#### 8.3. Tạo task cleanup chạy mỗi 1 giờ
-
-Task cleanup chuyển file `[DONE]` cũ và output cũ sang trạng thái cloud-only của OneDrive Files On-Demand, giúp máy admin không phình dung lượng.
+Task 2: free up OneDrive local disk space every hour.
 
 ```powershell
 schtasks /create /tn "SQL-BulkEx-Cleanup" /sc hourly /mo 1 /tr "\"<PATH_PYTHONW>\" \"<PATH_REPO>\runner.py\" --cleanup" /st 00:30 /f
 ```
 
-Ví dụ với path thật:
+Useful commands:
 
 ```powershell
-schtasks /create /tn "SQL-BulkEx-Cleanup" /sc hourly /mo 1 /tr "\"C:\Users\RYAN TOAN\AppData\Local\Programs\Python\Python313\pythonw.exe\" \"C:\Users\RYAN TOAN\Downloads\GIT\sql-bulkex\runner.py\" --cleanup" /st 00:30 /f
-```
-
-Cleanup đọc `settings.yaml -> onedrive_freeup`. Nếu `enabled: false`, lệnh thoát thành công và không đụng file nào.
-
-#### 8.4. Kiểm tra runner đang chạy
-
-```powershell
-# Xem task tồn tại
 schtasks /query /tn "SQL BulkEx Runner"
 schtasks /query /tn "SQL-BulkEx-Cleanup"
-
-# Runner chỉ poll folder settings.yaml -> folders.approved
-# File ở 01_Pending phải chờ admin kéo sang 02_Approved.
-
-# Xem log runner realtime (mỗi 2 phút phải có dòng mới nếu có request)
-Get-Content "<PATH_REPO>\log\runner.log" -Tail 20 -Wait
-# Ctrl+C để thoát
-```
-
-#### 8.5. Bật / Tắt / Xoá task
-
-```powershell
-# Chạy NGAY 1 lần (không chờ 2 phút)
 schtasks /run /tn "SQL BulkEx Runner"
 schtasks /run /tn "SQL-BulkEx-Cleanup"
-
-# TẠM DỪNG (giữ task, không chạy nữa)
 schtasks /change /tn "SQL BulkEx Runner" /disable
 schtasks /change /tn "SQL-BulkEx-Cleanup" /disable
-
-# BẬT LẠI
-schtasks /change /tn "SQL BulkEx Runner" /enable
-schtasks /change /tn "SQL-BulkEx-Cleanup" /enable
-
-# XOÁ HẲN
-schtasks /delete /tn "SQL BulkEx Runner" /f
-schtasks /delete /tn "SQL-BulkEx-Cleanup" /f
 ```
-
-#### 8.6. Dùng GUI thay CLI (dễ nhìn hơn)
-
-Nếu không quen PowerShell, dùng Task Scheduler GUI:
-
-1. Nhấn **`Win + R`** → gõ `taskschd.msc` → Enter
-2. Panel trái: click **Task Scheduler Library**
-3. Panel giữa: tìm dòng `SQL BulkEx Runner` hoặc `SQL-BulkEx-Cleanup`
-4. Right-click → chọn: **Run** (chạy ngay) / **Disable** (tạm tắt) / **Enable** (bật lại) / **Delete** (xoá)
-5. Double-click task để xem chi tiết: tab **Triggers** (lịch chạy), **Actions** (lệnh chạy), **History** (lịch sử chạy)
-
-#### 8.7. Lưu ý thực chiến
-
-- 🖥️ **Task chỉ chạy khi user đăng nhập.** Nếu máy đăng xuất → runner dừng. Muốn chạy ngay cả khi logout → cần setup "Run whether user is logged on or not" trong GUI (yêu cầu nhập password Windows, không khuyến nghị).
-- 💤 **Máy sleep = task không chạy.** Vào **Settings → Power & sleep → Sleep = Never** cho máy giữ DB.
-- 🐛 **Debug lần đầu:** tạm thay `pythonw.exe` (silent) bằng `python.exe` (có console) trong lệnh tạo → thấy log ngay để test. Xong đổi lại `pythonw.exe` để chạy nền.
-- 📁 **Path có dấu space** như `C:\Users\RYAN TOAN\...` — schtasks parse quoted path OK, nếu lỗi thì thử copy repo sang path không có space (vd `C:\sql-bulkex\`).
 
 ---
 
-## 📝 Hướng dẫn cho Sales / Requestor
+## 9. OneDrive Files On-Demand Cleanup
 
-**Chỉ 3 bước:**
+`python runner.py --cleanup` scans:
 
-1. **Copy** `request_template.xlsx` trong folder OneDrive `inbox/`, đổi tên (vd `hoa_20260707_HS8436.xlsx`)
-2. **Điền** 2 sheet:
-   - Sheet `Request`: 7 ô (Người yêu cầu, Bảng, Năm, Tháng, Tách file, Xác nhận lớn, Ghi chú)
-   - Sheet `Cột Export` / `Cột Import`: mỗi cột 1 dòng đã có sẵn — chỉ điền 3 cột phải: Toán tử, Giá trị, Lấy về
-3. **Thả** file vào `inbox/` (OneDrive tự sync)
-
-Sau tối đa 2 phút:
-- ✅ **Thành công** → kết quả xuất hiện ở `results/`
-- ❌ **Lỗi** → file bị rename `[LOI]_*.xlsx` + kèm `.txt` giải thích. Sửa xong đổi tên bỏ prefix hoặc save mới, thả lại.
-
-**Ví dụ điền:**
-
-Muốn tra: tờ khai xuất khẩu HS `8436*` sang Trung Quốc, lấy 3 cột.
-
-Sheet `Request`:
-```
-Người yêu cầu:  Hoa
-Bảng:           export
-Năm:            2026
-Tháng:          03
-Ghi chú:        HS8436_CN_thang3
-```
-
-Sheet `Cột Export` (chỉ điền các dòng cần):
-| Cột | Toán tử | Giá trị | Lấy về? |
-|---|---|---|---|
-| ma_so_hang_hoa | *(để trống, auto prefix)* | 8436 | *(auto YES)* |
-| ma_nuoc | eq | CN | *(auto YES)* |
-| so_to_khai | | | YES |
-| tri_gia_usd | | | YES |
-| ngay_dang_ky | | | YES |
-
-→ SQL: `WHERE ma_so_hang_hoa LIKE '8436%' AND ma_nuoc = 'CN'` với 5 cột trong output.
-
-**5 toán tử:**
-
-| Toán tử | Cách nhập Giá trị | Ví dụ |
+| Folder | Files | Delay |
 |---|---|---|
-| `eq` | 1 giá trị | `CN` |
-| `in` | Nhiều giá trị, cách phẩy | `CN,KR,JP` |
-| `prefix` | 1 hoặc nhiều prefix cách phẩy | `84,85` hoặc `0301234` |
-| `contains` | 1 chuỗi | `laptop` |
-| `between` | Đúng 2 giá trị cách phẩy | `1000,5000` |
+| `folders.approved` | `[DONE] *.xlsx` and `[DONE *]*.xlsx` | `approved_delay_hours` |
+| `folders.output` | `*.xlsx` | `output_delay_days` |
 
-**Quy tắc:**
-- Có Toán tử + Giá trị = **filter WHERE + tự động có trong output**
-- Trống Toán tử + Có Giá trị + cột có default = auto áp default (xem sheet NOTE trong file kết quả)
-- Trống Toán tử + Có Giá trị + không có default = warning, giá trị bỏ qua
-- Trống Toán tử + Trống Giá trị + Lấy về = YES → chỉ output
-- Trống hết = skip cột này
+For each old file, it calls:
+
+```powershell
+attrib +U -P "<file>"
+```
+
+This asks OneDrive to keep the file in cloud-only state. If `attrib` fails or OneDrive is not active, the runner logs a warning and continues.
+
+Disable cleanup:
+
+```yaml
+onedrive_freeup:
+  enabled: false
+```
 
 ---
 
-## 🔧 Portal terminal (dành cho admin query trực tiếp)
+## 10. Structured Log: `log/requests.csv`
 
-Admin có thể query trực tiếp qua menu tương tác (không cần Excel):
+Every processed request appends one row:
 
-```powershell
-python portal.py
+```csv
+timestamp,requester_cell,requester_meta,file_name,dataset,row_count,duration_sec,status,output_file,error
 ```
 
-Flow menu: database → schema → bảng → tick cột → thêm bộ lọc → tách file (tuỳ chọn) → sắp xếp → review → export.
+Columns:
 
-**Saved jobs:**
-
-```powershell
-python portal.py                  # menu tương tác, save job trong đó
-python portal.py --list-jobs      # xem job đã lưu
-python portal.py --job ten_job    # chạy lại
-```
-
-`jobs.yaml` là local state, đã gitignored.
-
----
-
-## 🚨 Xử lý sự cố
-
-| Triệu chứng | Cách sửa |
+| Column | Meaning |
 |---|---|
-| `column.yaml chưa có datasets` | Điền datasets rồi chạy `--scan-columns` |
-| `--scan-columns` không tìm được bảng | Kiểm tra pattern `tables` khớp tên bảng thật trong DB |
-| File bị `[LOI]_` | Đọc `.txt` cùng thư mục, sửa Excel, đổi tên bỏ prefix, thả lại |
-| Giá trị filter không có tác dụng | Quên set Toán tử + cột không có default → điền Toán tử vào dropdown |
-| MST 13 số bị mất số 0 đầu | Cột `Giá trị` đã format Text — nếu vẫn lỗi, chèn `'` trước giá trị |
-| Kết quả ra CSV thay xlsx | Vượt 1M dòng Excel limit, bình thường |
-| Chọn Bảng = Export nhưng điền sheet Cột Import | Runner reject với message rõ |
+| `timestamp` | start time |
+| `requester_cell` | `Request!B1` |
+| `requester_meta` | Excel `lastModifiedBy` |
+| `file_name` | original request file |
+| `dataset` | `export`, `import`, or `both` |
+| `row_count` | exported row count |
+| `duration_sec` | processing time |
+| `status` | `success`, `rejected`, `error` |
+| `output_file` | result workbook/csv |
+| `error` | rejection/error text |
 
-Logs: `log/runner.log` (runner), `log/portal.log` (portal).
-
----
-
-## 🔒 Bảo mật
-
-- `connection.yaml` commit git với `password: ""`. Password thật ở `.password` (gitignored).
-- `column.yaml` có thể commit (không chứa secret, chỉ tên bảng/cột).
-- **Không đặt repo bên trong folder cloud-sync** — dễ leak file `.password` lên cloud.
-- Share dữ liệu = share quyền truy cập folder `folders.output`.
-- Máy giữ DB phải luôn bật khi giờ hành chính (single point of failure — chuyển từ 1 người biết SQL sang 1 máy).
+The CSV is UTF-8-BOM so Excel opens Vietnamese text correctly. If Excel has the CSV locked, runner retries 3 times and logs a warning instead of crashing.
 
 ---
 
-## 📚 Tài liệu chi tiết
-
-- **[docs/HUONG_DAN_SU_DUNG.md](docs/HUONG_DAN_SU_DUNG.md)** — Hướng dẫn đầy đủ tiếng Việt, có ví dụ điền cụ thể
-- **[docs/SPEC.md](docs/SPEC.md)** — Spec kỹ thuật (cho ai muốn hiểu sâu / contribute)
-- **[docs/SPEC_v5.md](docs/SPEC_v5.md)** — Spec architecture v5 (column-based model)
-
----
-
-## 🧪 Development
+## 11. Common Commands
 
 ```powershell
-# Chạy toàn bộ test
-python -m pytest
+# Scan columns from DB into column.yaml
+python runner.py --scan-columns --yes
 
-# Test theo group
-python -m pytest tests/test_v5_scan.py -v
-python -m pytest tests/test_v5_parse.py -v
-python -m pytest tests/test_v5_e2e.py -v
+# Scan low-cardinality values into column.yaml
+python runner.py --scan-values --yes
 
-# Không sinh __pycache__ và .pytest_cache
-# (đã config trong conftest.py + pytest.ini)
+# Generate request_template.xlsx
+python runner.py --make-template
+
+# Process one polling round
+python runner.py --once
+
+# Free up old OneDrive files
+python runner.py --cleanup
+
+# Run tests
+python -m pytest -q
 ```
 
 ---
 
-## 📄 License
+## 12. Troubleshooting / Xu Ly Loi
 
-[MIT](LICENSE) © 2026 Vstream
+| Symptom | Fix |
+|---|---|
+| File becomes `[LOI]_...xlsx` | Open the companion `.txt`, fix request, rename without `[LOI]_`, put back in `02_Approved/` |
+| Pending file not processed | Expected. Admin must move it to `02_Approved/` |
+| No dropdown values | Run `--scan-values --yes`, then `--make-template` |
+| Digits rejected | Ensure the typed value length equals Digits |
+| Cleanup does nothing | Check `onedrive_freeup.enabled` and OneDrive Files On-Demand |
+| CSV log not updating | Close `log/requests.csv` in Excel, runner will retry next request |
 
 ---
 
-## 💡 Đóng góp
+## 13. Compatibility
 
-Issues và PR welcome. Đọc `docs/SPEC.md` để hiểu kiến trúc trước khi contribute.
+- PostgreSQL only via `psycopg2`.
+- v5 request workbooks still parse with a warning.
+- Old `input_dir` / `output_dir` settings still work with a deprecation warning.
+- `portal.py`, `.password`, `connection.yaml`, and `jobs.yaml` remain compatible.
