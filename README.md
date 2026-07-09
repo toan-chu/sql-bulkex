@@ -319,3 +319,59 @@ python -m pytest -q
 - v5 request workbooks still parse with a warning.
 - Old `input_dir` / `output_dir` settings still work with a deprecation warning.
 - `portal.py`, `.password`, `connection.yaml`, and `jobs.yaml` remain compatible.
+
+---
+
+## 14. FAQ / Câu hỏi thường gặp
+
+### Vai trò 2 người
+
+- **Sales / MKT** (người xin dữ liệu): điền file Excel request, upload lên OneDrive folder `01_Pending`, nhắn admin duyệt qua Zalo, chờ lấy file kết quả ở `03_Output`.
+- **Admin** (người giữ máy Hà Nội): cài repo, giữ máy bật khi làm việc, duyệt request bằng cách kéo file trong OneDrive từ `01_Pending` sang `02_Approved`. Không cần biết code hay SQL.
+
+### Sales — quy trình 1 request
+
+1. Vào OneDrive folder `01_Pending`, download `request_template.xlsx`.
+2. Đổi tên file (VD `hoa_20260709_HS8306.xlsx`), mở lên.
+3. Sheet **Request**: điền Người yêu cầu, Bảng (`export` / `import` / `both`), Năm, Tháng, tên request.
+4. Sheet **Cột Export** hoặc **Cột Import**: tìm dòng cột muốn filter, điền value vào cell op tương ứng.
+5. Save file, upload lại vào `01_Pending`.
+6. Nhắn Zalo admin: "Anh check giúp file `hoa_20260709_HS8306.xlsx`".
+7. Chờ ~2-5 phút sau khi admin duyệt, vào `03_Output` lấy file kết quả.
+
+### Admin — quy trình duyệt
+
+- Mở app OneDrive trên điện thoại hoặc máy tính.
+- Vào `01_Pending`, mở file kiểm tra request có hợp lý không.
+- Nếu OK: tap `...` → Move → chọn `02_Approved` → Move here (trên điện thoại), hoặc kéo thả trên máy tính.
+- Runner tại máy admin Hà Nội sẽ tự phát hiện file mới trong 2 phút, chạy query, đặt file kết quả vào `03_Output`, đổi tên file gốc thành `[DONE] hoa_20260709_HS8306.xlsx`.
+- Không cần biết SQL, không cần mở terminal.
+
+### Case dùng phổ biến
+
+**Q: Muốn 4 nhóm HS Code cấp heading (4 số)?**
+→ 1 dòng cột `ma_so_hang_hoa`, cell **Bắt đầu bằng** = `8306, 8307, 8308, 8309`, **Digits** = `4`.
+
+**Q: Muốn kết hợp Bắt đầu bằng và Kết thúc bằng cùng 1 cột?**
+→ Điền cả 2 cell trong cùng dòng. Tool tự AND. VD `Bắt đầu bằng` = `8471` + `Kết thúc bằng` = `00` → mã bắt đầu 8471 và kết thúc 00.
+
+**Q: Xin cả Export và Import trong 1 request?**
+→ Chọn `Bảng = both`, điền cả 2 sheet `Cột Export` và `Cột Import`. File kết quả có 3 sheet: `Export`, `Import`, `NOTE`.
+
+**Q: Digits để làm gì? Quên điền có sao không?**
+→ Digits = số ký tự user muốn match từ trái (prefix) hoặc phải (suffix). Quên điền → tool vẫn chạy, chỉ không constrain độ dài value. Nếu điền thì mọi value trong list phải cùng số ký tự = Digits.
+
+**Q: Máy admin có phải bật 24/7 không?**
+→ Không. Chỉ cần bật khi admin làm việc. Sales upload file lúc nào cũng được, admin bật máy + duyệt là runner chạy. File nằm im ở `01_Pending` cho đến khi admin duyệt.
+
+**Q: Có phải cài Power Automate hay Teams không?**
+→ Không. Chỉ cần OneDrive + Task Scheduler Windows built-in. Repo share với MNC được, không phụ thuộc M365 add-on.
+
+**Q: File bị đổi tên thành `[LOI]_xxx.xlsx`, phải làm gì?**
+→ Có file `.txt` cùng tên giải thích lỗi. Mở file `.xlsx` trong `02_Approved`, sửa theo hướng dẫn, đổi tên bỏ prefix `[LOI]_` (hoặc save tên mới), thả lại vào `01_Pending` để admin duyệt lại.
+
+**Q: Excel không hiện dropdown giá trị cho cột `ma_nuoc`?**
+→ Chạy lại `python runner.py --scan-values --yes` rồi `python runner.py --make-template`. Đảm bảo `column.yaml` có `cardinality.threshold` ≥ 200 để cover 195 nước.
+
+**Q: File output cũ chiếm dung lượng máy admin?**
+→ Task Scheduler `--cleanup` chạy mỗi giờ tự set file cũ về cloud-only (icon ☁️ trên OneDrive). File vẫn tồn tại trên SharePoint, chỉ không tốn disk. Muốn tải lại → click vào file.
