@@ -92,11 +92,11 @@ def patch_v5_process_boundaries(monkeypatch, tmp_path, rows, export_kind="xlsx")
     captured = {"notes": []}
 
     monkeypatch.setattr(runner.portal, "get_conn", lambda conns, cfg, dbname: FakeConn())
-    monkeypatch.setattr(runner, "parse_request_v5", lambda path, column_cfg: parsed_request())
+    monkeypatch.setattr(runner, "parse_request_v6", lambda path, column_cfg, op_builder=None: parsed_request())
     monkeypatch.setattr(
         runner,
-        "build_jobs_from_v5_request",
-        lambda parsed, cur: (
+        "build_jobs_from_v6_dataset",
+        lambda request, dataset_name, dataset_result, cur, op_builder=None: (
             "db/name",
             ([("job_suffix", "db/name", "SQL", [])], [("Dataset", "export")], ["mst", "hs"]),
         ),
@@ -180,7 +180,7 @@ def test_process_request_v5_yes_runs_and_moves_processed(monkeypatch, tmp_path):
     request_path = tmp_path / "request.xlsx"
     request_path.write_text("placeholder", encoding="utf-8")
     patch_v5_process_boundaries(monkeypatch, tmp_path, rows=301)
-    monkeypatch.setattr(runner, "parse_request_v5", lambda path, column_cfg: parsed_request("YES"))
+    monkeypatch.setattr(runner, "parse_request_v6", lambda path, column_cfg, op_builder=None: parsed_request("YES"))
     settings = {
         "output_dir": str(tmp_path / "out"),
         "max_rows_auto": 300,
@@ -198,7 +198,7 @@ def test_process_request_v5_rejects_hard_cap(monkeypatch, tmp_path):
     request_path = tmp_path / "request.xlsx"
     request_path.write_text("placeholder", encoding="utf-8")
     patch_v5_process_boundaries(monkeypatch, tmp_path, rows=1001)
-    monkeypatch.setattr(runner, "parse_request_v5", lambda path, column_cfg: parsed_request("YES"))
+    monkeypatch.setattr(runner, "parse_request_v6", lambda path, column_cfg, op_builder=None: parsed_request("YES"))
     settings = {
         "output_dir": str(tmp_path / "out"),
         "max_rows_auto": 300,
@@ -231,7 +231,7 @@ def test_process_request_v5_over_excel_limit_switches_to_csv(monkeypatch, tmp_pa
     request_path = tmp_path / "request.xlsx"
     request_path.write_text("placeholder", encoding="utf-8")
     patch_v5_process_boundaries(monkeypatch, tmp_path, rows=runner.XLSX_ROW_LIMIT + 1)
-    monkeypatch.setattr(runner, "parse_request_v5", lambda path, column_cfg: parsed_request("YES"))
+    monkeypatch.setattr(runner, "parse_request_v6", lambda path, column_cfg, op_builder=None: parsed_request("YES"))
     settings = {
         "output_dir": str(tmp_path / "out"),
         "max_rows_auto": 300,

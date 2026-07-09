@@ -5,7 +5,7 @@ pgserver = pytest.importorskip("pgserver")
 psycopg2 = pytest.importorskip("psycopg2")
 
 import runner
-from tests.test_v5_e2e import fill_request, initial_column_cfg
+from tests.test_v5_e2e import fill_request, initial_column_cfg, make_legacy_v5_template
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def test_runner_v5_request_end_to_end_pgserver(monkeypatch, tmp_path, pg_uri):
     requests.mkdir()
     cfg = initial_column_cfg(columns=columns)
     cfg["datasets"]["export"]["schema"] = "public"
-    runner.make_request_template_v5(cfg, template)
+    make_legacy_v5_template(cfg, template)
     fill_request(
         template,
         requests / "request.xlsx",

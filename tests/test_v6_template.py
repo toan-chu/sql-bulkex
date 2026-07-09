@@ -77,38 +77,37 @@ def test_t43_column_export_has_digits_header(tmp_path):
     wb = build_template(tmp_path)
     ws = wb["Cột Export"]
 
-    assert [ws.cell(row=1, column=col).value for col in range(1, 6)] == [
-        "Cột",
-        "Toán tử",
-        "Giá trị",
-        "Digits",
-        "Lấy về?",
-    ]
-    assert ws.column_dimensions["B"].width == 22
-    assert ws.column_dimensions["D"].width == 10
+    header = [ws.cell(row=1, column=col).value for col in range(1, 10)]
+    assert header == ["Cột"] + VN_OPERATOR_LABELS + ["Digits", "Lấy về?"]
+    assert ws.column_dimensions["B"].width == 14
+    assert ws.column_dimensions["G"].width == 14
+    assert ws.column_dimensions["H"].width == 10
 
 
-def test_t44_operator_dropdown_uses_vn_registry_labels(tmp_path):
+def test_t44_value_dropdown_only_applies_to_eq_and_in_cells(tmp_path):
     wb = build_template(tmp_path)
     ws = wb["Cột Export"]
-    dv = validation_for_cell(ws, "B2", "list")
+    eq_dv = validation_for_cell(ws, "B2", "list")
+    in_dv = validation_for_cell(ws, "C2", "list")
 
-    assert dv is not None
-    assert dv.allow_blank
-    assert all(label in dv.formula1 for label in VN_OPERATOR_LABELS)
-    assert "eq" not in dv.formula1
+    assert eq_dv is not None
+    assert eq_dv.formula1 == "=ma_nuoc_values"
+    assert eq_dv.errorStyle == "information"
+    assert in_dv is not None
+    assert in_dv.formula1 == "=ma_nuoc_values"
+    assert in_dv.errorStyle == "information"
+    for cell in ("D2", "E2", "F2", "G2"):
+        assert validation_for_cell(ws, cell, "list") is None
 
 
 def test_t45_digits_column_has_gray_out_conditional_formatting(tmp_path):
     wb = build_template(tmp_path)
     ws = wb["Cột Export"]
-    rules = conditional_rules(ws, "D2:D4")
+    rules = conditional_rules(ws, "H2:H4")
 
     assert any(
         rule.type == "expression"
-        and 'Bắt đầu bằng' in "".join(rule.formula)
-        and 'Kết thúc bằng' in "".join(rule.formula)
-        and 'Chứa' not in "".join(rule.formula)
+        and "AND(ISBLANK($E2), ISBLANK($G2))" in "".join(rule.formula)
         and rule.dxf.fill.fgColor.rgb == "00E7E6E6"
         and rule.dxf.font.color.rgb == "00A6A6A6"
         for rule in rules
@@ -128,7 +127,31 @@ def test_t46_values_sheet_hidden_and_named_range_for_low_cardinality_column(tmp_
 def test_t47_value_cell_for_cached_column_references_named_range(tmp_path):
     wb = build_template(tmp_path)
     ws = wb["Cột Export"]
-    dv = validation_for_cell(ws, "C2", "list")
+    dv = validation_for_cell(ws, "B2", "list")
 
     assert dv is not None
     assert dv.formula1 == "=ma_nuoc_values"
+
+
+def test_t47b_digits_cell_has_common_values_dropdown(tmp_path):
+    wb = build_template(tmp_path)
+    ws = wb["Cột Export"]
+    dv = validation_for_cell(ws, "H2", "list")
+
+    assert dv is not None
+    assert dv.formula1 == '"2, 4, 6, 8, 10, 13"'
+    assert dv.allow_blank
+    assert dv.errorStyle == "information"
+
+
+def test_t47c_row_anchor_conditional_formatting_counts_operator_cells(tmp_path):
+    wb = build_template(tmp_path)
+    ws = wb["Cột Export"]
+    rules = conditional_rules(ws, "A2:I4")
+
+    assert any(
+        rule.type == "expression"
+        and "COUNTA($B2:$G2)>0" in "".join(rule.formula)
+        and rule.dxf.fill.fgColor.rgb == "00FFF2CC"
+        for rule in rules
+    )

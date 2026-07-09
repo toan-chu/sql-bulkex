@@ -53,26 +53,24 @@ def test_t32_new_operator_from_yaml_without_code_change(tmp_path):
     assert builder.debug_sql("ma_nuoc", "neq", "CN") == "ma_nuoc <> 'CN'"
 
 
-def test_t33_prefix_multi_with_digits_builds_like_any_and_length():
+def test_t33_prefix_multi_with_digits_builds_like_any_without_length():
     builder = OperatorBuilder("operators.yaml")
 
-    fragment, params = builder.build_where("ma_so", "prefix", "84,85", digits=4)
+    fragment, params = builder.build_where("ma_so", "prefix", "8306,8307", digits=4)
 
     assert isinstance(fragment, sql.Composable)
-    assert params == [["84%", "85%"], 4]
-    assert builder.debug_sql("ma_so", "prefix", "84,85", digits=4) == (
-        "(ma_so LIKE ANY(['84%', '85%'])) AND LENGTH(ma_so) = 4"
-    )
+    assert params == [["8306%", "8307%"]]
+    assert builder.debug_sql("ma_so", "prefix", "8306,8307", digits=4) == "(ma_so LIKE ANY(['8306%', '8307%']))"
 
 
 def test_t34_suffix_single_with_digits_builds_suffix_like():
     builder = OperatorBuilder("operators.yaml")
 
-    fragment, params = builder.build_where("ma_so", "suffix", "AA", digits=6)
+    fragment, params = builder.build_where("ma_so", "suffix", "AA", digits=2)
 
     assert isinstance(fragment, sql.Composable)
-    assert params == ["%AA", 6]
-    assert builder.debug_sql("ma_so", "suffix", "AA", digits=6) == "ma_so LIKE '%AA' AND LENGTH(ma_so) = 6"
+    assert params == ["%AA"]
+    assert builder.debug_sql("ma_so", "suffix", "AA", digits=2) == "ma_so LIKE '%AA'"
 
 
 def test_t35_between_ignores_digits_when_operator_does_not_support_it():
@@ -92,8 +90,12 @@ def test_t36_between_with_three_values_raises():
         builder.build_where("gia", "between", "1000,5000,9000")
 
 
-def test_t37_prefix_digits_shorter_than_value_raises():
+def test_t37_prefix_digits_validate_value_length():
     builder = OperatorBuilder("operators.yaml")
 
-    with pytest.raises(OperatorValueError, match="Digits"):
-        builder.build_where("ma_so", "prefix", "8436", digits=3)
+    fragment, params = builder.build_where("ma_so", "prefix", "8306", digits=4)
+
+    assert isinstance(fragment, sql.Composable)
+    assert params == ["8306%"]
+    with pytest.raises(OperatorValueError, match="value '84' có 2 ký tự, Digits yêu cầu 4"):
+        builder.build_where("ma_so", "prefix", "84", digits=4)

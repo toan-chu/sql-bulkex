@@ -66,12 +66,6 @@ class OperatorBuilder:
                 raise OperatorRegistryError(f"Operator {key} thiếu field: {', '.join(missing)}")
             if not spec.get("sql_single") and not spec.get("sql_multi"):
                 raise OperatorRegistryError(f"Operator {key} cần sql_single hoặc sql_multi.")
-            if spec.get("supports_digits"):
-                has_digits_template = any(
-                    spec.get(name) for name in ("sql_single_with_digits", "sql_multi_with_digits")
-                )
-                if not has_digits_template:
-                    raise OperatorRegistryError(f"Operator {key} supports_digits nhưng thiếu template digits.")
 
     def _build_display_to_key(self):
         result = {}
@@ -110,10 +104,15 @@ class OperatorBuilder:
             raise OperatorValueError(f"Cột {col}: toán tử {op} cần 1 giá trị, có {len(parts)}.")
 
         digits_int = self.normalize_digits(digits)
-        if digits_int is not None and spec.get("supports_digits"):
-            longest = max(len(part) for part in parts)
-            if digits_int < longest:
-                raise OperatorValueError(f"Cột {col}: Digits ({digits_int}) < độ dài value ('{parts[0]}').")
+        if digits_int is not None:
+            if not spec.get("supports_digits"):
+                return True
+            for part in parts:
+                if len(part) != digits_int:
+                    raise OperatorValueError(
+                        f"Cột {col}: value '{part}' có {len(part)} ký tự, "
+                        f"Digits yêu cầu {digits_int}. Vui lòng điền đúng {digits_int} ký tự."
+                    )
         return True
 
     def normalize_digits(self, digits):
@@ -140,38 +139,29 @@ class OperatorBuilder:
             return tuple(parts) if arity else parts
         return parts[0] if parts else ""
 
-    def _template_key(self, spec, parts, digits):
+    def _template_key(self, spec, parts):
         arity = spec.get("arity")
         multi = len(parts) > 1 or arity not in (None, 1)
-        base = "sql_multi" if multi else "sql_single"
-        if digits is not None and spec.get("supports_digits"):
-            return f"{base}_with_digits" if spec.get(f"{base}_with_digits") else base
-        return base
+        return "sql_multi" if multi else "sql_single"
 
     def build_where(self, col, op, val, digits=None):
         self.validate(col, op, val, digits)
         spec = self.operators[op]
         parts = self.split_value(val)
-        digits_int = self.normalize_digits(digits)
-        if digits_int is not None and not spec.get("supports_digits"):
-            digits_int = None
-        template = spec.get(self._template_key(spec, parts, digits_int))
+        template = spec.get(self._template_key(spec, parts))
         if not template:
             raise OperatorRegistryError(f"Operator {op} thiếu SQL template phù hợp.")
 
         params = []
-        fragment = self._compose_template(template, col, parts, digits_int, params)
+        fragment = self._compose_template(template, col, parts, None, params)
         return fragment, params
 
     def debug_sql(self, col, op, val, digits=None):
         self.validate(col, op, val, digits)
         spec = self.operators[op]
         parts = self.split_value(val)
-        digits_int = self.normalize_digits(digits)
-        if digits_int is not None and not spec.get("supports_digits"):
-            digits_int = None
-        template = spec.get(self._template_key(spec, parts, digits_int))
-        values = self._placeholder_values(parts, digits_int)
+        template = spec.get(self._template_key(spec, parts))
+        values = self._placeholder_values(parts, None)
         text = template
         for name in sorted(set(TOKEN_RE.findall(template)), key=len, reverse=True):
             replacement = col if name == "col" else repr(values[name])

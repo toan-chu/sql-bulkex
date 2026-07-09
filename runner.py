@@ -299,6 +299,75 @@ def parse_column_sheet(sheet, valid_cols, op_defaults, op_builder=None):
     return filters, select_cols, warnings
 
 
+def is_v6_column_sheet(sheet, op_builder=None):
+    op_builder = op_builder or load_operator_builder()
+    header = [
+        cell_text(cell)
+        for cell in next(sheet.iter_rows(min_row=1, max_row=1, max_col=9, values_only=True), ())
+    ]
+    return len(header) >= 2 and header[1] == op_builder.operators[op_builder.display_order[0]]["display"]
+
+
+def parse_column_sheet_v6_multi_op(sheet, valid_cols, op_defaults, op_builder=None):
+    op_builder = op_builder or load_operator_builder()
+    if not is_v6_column_sheet(sheet, op_builder):
+        filters, select_cols, warnings = parse_column_sheet(sheet, valid_cols, op_defaults, op_builder)
+        warnings.append("template v5, khuyến khích v6")
+        return filters, select_cols, warnings
+
+    valid_cols = set(valid_cols)
+    filters = []
+    select_cols = []
+    warnings = []
+    op_keys_in_order = list(op_builder.display_order)
+    if len(op_keys_in_order) != 6:
+        raise RequestError("operators.yaml display_order phải có đúng 6 toán tử cho template v6.")
+
+    for row in sheet.iter_rows(min_row=2, max_col=9, values_only=True):
+        cells = [cell_text(cell) for cell in row]
+        col = cells[0]
+        if not col:
+            continue
+        if col not in valid_cols:
+            warnings.append(f"Cột không hợp lệ trong sheet: {col}")
+            continue
+
+        op_values = {op_keys_in_order[i]: cells[i + 1] for i in range(6)}
+        digits_raw = cells[7]
+        out = cells[8].upper() if cells[8] else ""
+        try:
+            digits_int = op_builder.normalize_digits(digits_raw) if digits_raw else None
+        except OperatorValueError as e:
+            raise RequestError(str(e)) from e
+
+        active_ops = {op: val for op, val in op_values.items() if val}
+        if not active_ops:
+            if digits_int is not None:
+                warnings.append(f"Cột {col}: có Digits nhưng không có op nào active, bỏ qua Digits")
+            if out == "YES" and col not in select_cols:
+                select_cols.append(col)
+            continue
+
+        digits_used = False
+        for op, val in active_ops.items():
+            spec = op_builder.operators[op]
+            digits_for_op = digits_int if spec.get("supports_digits") else None
+            try:
+                op_builder.validate(col, op, val, digits_for_op)
+            except OperatorValueError as e:
+                raise RequestError(str(e)) from e
+            filters.append({"col": col, "op": op, "val": val, "digits": digits_for_op})
+            if digits_for_op is not None:
+                digits_used = True
+            if col not in select_cols:
+                select_cols.append(col)
+
+        if digits_int is not None and not digits_used:
+            warnings.append(f"Cột {col}: có Digits nhưng op active không hỗ trợ Digits, bỏ qua")
+
+    return filters, select_cols, warnings
+
+
 def parse_request_v5(path, column_cfg):
     wb = load_workbook(path, data_only=True, read_only=True)
     try:
@@ -331,6 +400,67 @@ def parse_request_v5(path, column_cfg):
             "select_cols": select_cols,
             "warnings": warnings,
         }
+    finally:
+        wb.close()
+
+
+def parse_request_v6(path, column_cfg, op_builder=None):
+    op_builder = op_builder or load_operator_builder()
+    wb = load_workbook(path, data_only=True, read_only=True)
+    try:
+        if "Request" not in wb.sheetnames:
+            raise RequestError("Thiếu sheet Request.")
+        req = parse_sheet_request(wb["Request"])
+        bang = cell_text(req.get("bang")).lower()
+        datasets = column_cfg.get("datasets") or {}
+        op_defaults = column_cfg.get("operator_defaults") or {}
+
+        def parse_dataset(dataset_name):
+            if dataset_name not in datasets:
+                raise RequestError(f"Bảng không hợp lệ: {dataset_name}")
+            sheet_name = "Cột Export" if dataset_name == "export" else "Cột Import"
+            if sheet_name not in wb.sheetnames:
+                raise RequestError(f"Thiếu sheet {sheet_name}.")
+            dataset = datasets[dataset_name]
+            filters, select_cols, warnings = parse_column_sheet_v6_multi_op(
+                wb[sheet_name],
+                set(dataset.get("columns") or []),
+                op_defaults,
+                op_builder,
+            )
+            return {
+                "dataset": dataset,
+                "dataset_name": dataset_name,
+                "filters": filters,
+                "select_cols": select_cols,
+                "warnings": warnings,
+            }
+
+        if bang == "both":
+            export_result = parse_dataset("export")
+            import_result = parse_dataset("import")
+            if not (
+                export_result["filters"]
+                or export_result["select_cols"]
+                or import_result["filters"]
+                or import_result["select_cols"]
+            ):
+                raise RequestError("Bảng=both nhưng cả 2 sheet đều trống.")
+            return {
+                "request": req,
+                "bang": "both",
+                "export": export_result,
+                "import": import_result,
+            }
+
+        if bang not in datasets:
+            raise RequestError(f"Bảng không hợp lệ: {req.get('bang', '')}")
+        result = parse_dataset(bang)
+        if not result["filters"] and not result["select_cols"]:
+            raise RequestError("Chưa chọn cột filter cũng chưa chọn cột lấy về.")
+        result["request"] = req
+        result["bang"] = bang
+        return result
     finally:
         wb.close()
 
@@ -633,7 +763,7 @@ def sample_distinct_count(cur, schema, table, column, sample_size):
 def sample_text_too_long(cur, schema, table, column, skip_text_length, sample_size):
     query = sql.SQL(
         """
-        SELECT AVG(LENGTH(value))
+        SELECT AVG(char_length(value))
         FROM (
             SELECT {column}::text AS value
             FROM {schema}.{table}
@@ -917,6 +1047,49 @@ def note_rows_v5(parsed, missing_tables):
     return rows
 
 
+def note_rows_v6(request, dataset_name, dataset_result, missing_tables):
+    rows = [
+        ("Bảng", dataset_name),
+        ("Người yêu cầu", request.get("user", "")),
+        ("Ghi chú / tên request", request.get("request_name", "")),
+        ("Năm", request.get("year", "")),
+        ("Tháng", request.get("month", "")),
+        ("Số filter", len(dataset_result["filters"])),
+        ("Số cột lấy về", len(dataset_result["select_cols"])),
+    ]
+    if missing_tables:
+        rows.append(("Bảng thiếu", ", ".join(missing_tables)))
+    for warning in dataset_result.get("warnings") or []:
+        rows.append(("WARNING", warning))
+    return rows
+
+
+def build_where_clause(filters, op_builder=None):
+    op_builder = op_builder or load_operator_builder()
+    if not filters:
+        return sql.SQL(""), []
+    fragments = []
+    all_params = []
+    for item in filters:
+        fragment, params = op_builder.build_where(
+            item["col"],
+            item["op"],
+            item["val"],
+            item.get("digits"),
+        )
+        fragments.append(fragment)
+        all_params.extend(params)
+    return sql.SQL(" WHERE ") + sql.SQL(" AND ").join(fragments), all_params
+
+
+def build_v6_query(schema, tables, columns, filters, op_builder=None):
+    where_sql, params = build_where_clause(filters, op_builder)
+    if len(tables) == 1:
+        return portal.build_query(schema, tables[0], columns, where_sql), params
+    queries = [portal.build_query(schema, table, columns, where_sql, source_label=table) for table in tables]
+    return sql.SQL(" UNION ALL ").join(queries), params * len(tables)
+
+
 def build_jobs_from_v5_request(parsed, cur):
     op_builder = load_operator_builder()
     req = parsed["request"]
@@ -955,6 +1128,31 @@ def build_jobs_from_v5_request(parsed, cur):
     }
     jobs = portal.make_jobs(state, cur)
     return dataset["database"], (jobs, note_rows_v5(parsed, missing), selected)
+
+
+def build_jobs_from_v6_dataset(request, dataset_name, dataset_result, cur, op_builder=None):
+    dataset = dataset_result["dataset"]
+    if not dataset_result["filters"] and not dataset_result["select_cols"]:
+        return dataset["database"], ([], note_rows_v6(request, dataset_name, dataset_result, []), [])
+
+    schema = dataset["schema"]
+    tables, missing = expand_tables(cur, schema, dataset["tables"], request)
+    if not tables:
+        raise RequestError(f"Không có bảng nào tồn tại cho pattern: {dataset['tables']}")
+
+    valid_columns = common_columns(cur, schema, tables)
+    selected = list(dataset_result["select_cols"])
+    filter_columns = [item["col"] for item in dataset_result["filters"]]
+    needed = selected + filter_columns
+    bad = [col for col in needed if col not in valid_columns]
+    if bad:
+        valid = ", ".join(valid_columns)
+        raise RequestError(f"Cột không có trong bảng đã chọn: {', '.join(sorted(set(bad)))}. Cột hợp lệ: {valid}")
+
+    query, params = build_v6_query(schema, tables, selected, dataset_result["filters"], op_builder)
+    suffix = "merged" if len(tables) > 1 else tables[0]
+    name = portal.safe_name(f"{dataset['database']}_{schema}_{suffix}")
+    return dataset["database"], ([(name, dataset["database"], query, params)], note_rows_v6(request, dataset_name, dataset_result, missing), selected)
 
 
 def estimate_mb(rows, columns):
@@ -1030,6 +1228,38 @@ def export_xlsx_v5_with_note(conn, query, params, headers, filepath, notes):
     return count
 
 
+def append_query_to_sheet(conn, ws, query, params, headers):
+    if headers:
+        ws.append(headers)
+    count = 0
+    with conn.cursor(name="bulkex_runner_stream") as cur:
+        cur.itersize = 5000
+        cur.execute(query, params or None)
+        for row in cur:
+            ws.append(list(row))
+            count += 1
+    return count
+
+
+def export_xlsx_v6_both(results, filepath, notes):
+    wb = Workbook(write_only=True)
+    counts = {}
+    for sheet_name, result in results:
+        ws = wb.create_sheet(sheet_name)
+        counts[sheet_name] = 0
+        conn = result["conn"]
+        for job in result["jobs"]:
+            _name, _dbname, query, params = job
+            headers = fetch_headers(conn, query, params)
+            counts[sheet_name] += append_query_to_sheet(conn, ws, query, params, headers)
+            conn.rollback()
+    note_ws = wb.create_sheet("NOTE")
+    for row in notes:
+        note_ws.append(list(row))
+    wb.save(filepath)
+    return counts
+
+
 def export_csv_with_note(conn, query, params, headers, filepath, notes):
     count = 0
     with conn.cursor(name="bulkex_runner_stream") as cur:
@@ -1081,22 +1311,7 @@ def move_to_error(path, message):
     return moved
 
 
-def process_request_file_v5(path, cfg, conns, settings, column_cfg):
-    parsed = parse_request_v5(path, column_cfg)
-    dataset = parsed["dataset"]
-    conn = portal.get_conn(conns, cfg, dataset["database"])
-    cur = conn.cursor()
-    try:
-        _dbname, (jobs, base_notes, columns) = build_jobs_from_v5_request(parsed, cur)
-        rows_by_job = []
-        for job in jobs:
-            rows = portal.count_rows(cur, job[2], job[3])
-            rows_by_job.append(rows)
-        conn.rollback()
-    finally:
-        cur.close()
-
-    request = parsed["request"]
+def check_row_limits(rows_by_job, columns, request, settings):
     max_auto = int(settings.get("max_rows_auto", DEFAULT_SETTINGS["max_rows_auto"]))
     max_hard = int(settings.get("max_rows_hard", DEFAULT_SETTINGS["max_rows_hard"]))
     confirmed = cell_text(request.get("large_confirm")).upper() == "YES"
@@ -1113,7 +1328,63 @@ def process_request_file_v5(path, cfg, conns, settings, column_cfg):
                 "điền ô 'Xác nhận lớn' = YES rồi gửi lại."
             )
 
+
+def prepare_v6_dataset_jobs(dataset_name, dataset_result, request, cfg, conns, settings, op_builder):
+    dataset = dataset_result["dataset"]
+    conn = portal.get_conn(conns, cfg, dataset["database"])
+    cur = conn.cursor()
+    try:
+        _dbname, (jobs, base_notes, columns) = build_jobs_from_v6_dataset(
+            request, dataset_name, dataset_result, cur, op_builder
+        )
+        rows_by_job = [portal.count_rows(cur, job[2], job[3]) for job in jobs]
+        conn.rollback()
+    finally:
+        cur.close()
+    check_row_limits(rows_by_job, columns, request, settings)
+    return {
+        "conn": conn,
+        "jobs": jobs,
+        "notes": base_notes,
+        "columns": columns,
+        "rows_by_job": rows_by_job,
+        "dataset": dataset,
+    }
+
+
+def process_request_file_v5(path, cfg, conns, settings, column_cfg):
+    op_builder = load_operator_builder()
+    parsed = parse_request_v6(path, column_cfg, op_builder)
+    request = parsed["request"]
+
     TMP_DIR.mkdir(parents=True, exist_ok=True)
+    if parsed.get("bang") == "both":
+        prepared = []
+        all_notes = [("Bảng", "both")]
+        for dataset_name, sheet_name in (("export", "Export"), ("import", "Import")):
+            result = prepare_v6_dataset_jobs(
+                dataset_name, parsed[dataset_name], request, cfg, conns, settings, op_builder
+            )
+            prepared.append((sheet_name, result))
+            all_notes.extend(result["notes"])
+            all_notes.append(("Số dòng " + sheet_name, sum(result["rows_by_job"])))
+        final_path = output_path_for_job(settings, request, "", ".xlsx")
+        tmp_path = unique_path(TMP_DIR / final_path.name)
+        counts = export_xlsx_v6_both(prepared, tmp_path, all_notes)
+        final = move_finished_file(tmp_path, final_path)
+        log_event(f"Exported {final.name}: {counts}")
+        moved = move_request(path, "processed")
+        log_event(f"Processed request {path.name} -> {moved}")
+        return moved
+
+    dataset_name = parsed.get("bang") or parsed.get("dataset_name")
+    result = prepare_v6_dataset_jobs(dataset_name, parsed, request, cfg, conns, settings, op_builder)
+    dataset = result["dataset"]
+    conn = result["conn"]
+    jobs = result["jobs"]
+    base_notes = result["notes"]
+    columns = result["columns"]
+    rows_by_job = result["rows_by_job"]
     for index, job in enumerate(jobs):
         name, _dbname, query, params = job
         rows = rows_by_job[index]
@@ -1254,6 +1525,15 @@ def add_list_validation(ws, cells, values, allow_blank=True):
     return dv
 
 
+def add_named_range_validation(ws, cell, range_name, error_style=None):
+    dv = DataValidation(type="list", formula1=f"={range_name}", allow_blank=True)
+    if error_style:
+        dv.errorStyle = error_style
+    ws.add_data_validation(dv)
+    dv.add(cell)
+    return dv
+
+
 def operator_display_values(op_builder):
     return [display for _key, display in op_builder.display_labels()]
 
@@ -1352,42 +1632,36 @@ def setup_request_sheet(ws, column_cfg):
     ws.print_area = "A1:B8"
 
 
-def add_digits_validations(ws, cells, digits_displays):
-    dv = DataValidation(type="whole", operator="between", formula1="1", formula2="50", allow_blank=True)
-    dv.error = "Digits chỉ dùng cho Bắt đầu bằng / Kết thúc bằng"
-    dv.errorTitle = "Digits không hợp lệ"
+def add_digits_validation(ws, cells):
+    dv = DataValidation(
+        type="list",
+        formula1='"2, 4, 6, 8, 10, 13"',
+        allow_blank=True,
+        errorStyle="information",
+    )
     ws.add_data_validation(dv)
     dv.add(cells)
-    digit_checks = ",".join(f"$B2={excel_string_literal(display)}" for display in digits_displays)
-    allowed_ops_formula = f"OR({digit_checks})" if digit_checks else "FALSE"
-    custom = DataValidation(
-        type="custom",
-        formula1=f'=OR($D2="",AND({allowed_ops_formula},$D2>=1,$D2<=50,INT($D2)=$D2))',
-        allow_blank=True,
-    )
-    custom.error = "Digits chỉ dùng cho Bắt đầu bằng / Kết thúc bằng"
-    custom.errorTitle = "Digits không hợp lệ"
-    ws.add_data_validation(custom)
-    custom.add(cells)
     return dv
 
 
-def add_value_dropdowns(ws, columns, named_ranges):
+def add_value_dropdowns(ws, columns, named_ranges, value_columns):
     for index, column in enumerate(columns, 2):
         range_name = named_ranges.get(column)
         if not range_name:
             continue
-        dv = DataValidation(type="list", formula1=f"={range_name}", allow_blank=True)
-        ws.add_data_validation(dv)
-        dv.add(ws.cell(row=index, column=3))
+        for value_column in value_columns:
+            add_named_range_validation(ws, ws.cell(row=index, column=value_column), range_name, "information")
 
 
 def setup_column_sheet(ws, title, columns, op_builder, named_ranges):
     ws.title = title
-    ws.append(["Cột", "Toán tử", "Giá trị", "Digits", "Lấy về?"])
-    style_table_header(ws, 1, 5)
+    display_labels = operator_display_values(op_builder)
+    ws.append(["Cột"] + display_labels + ["Digits", "Lấy về?"])
+    style_table_header(ws, 1, 9)
     ws.freeze_panes = "A2"
-    widths = {"A": 35, "B": 22, "C": 30, "D": 10, "E": 12}
+    widths = {"A": 35, "H": 10, "I": 12}
+    for key in ("B", "C", "D", "E", "F", "G"):
+        widths[key] = 14
     for key, width in widths.items():
         ws.column_dimensions[key].width = width
 
@@ -1396,72 +1670,88 @@ def setup_column_sheet(ws, title, columns, op_builder, named_ranges):
     for index, column in enumerate(columns, 2):
         ws.cell(row=index, column=1, value=column)
         if index % 2 == 0:
-            for col in range(1, 6):
+            for col in range(1, 10):
                 ws.cell(row=index, column=col).fill = zebra_fill
         col_cell = ws.cell(row=index, column=1)
         col_cell.fill = gray_fill
         col_cell.font = Font(name="Calibri", size=11, italic=True)
         col_cell.protection = Protection(locked=False)
-        ws.cell(row=index, column=3).number_format = "@"
-        ws.cell(row=index, column=4).number_format = "0"
-        ws.cell(row=index, column=4).alignment = Alignment(horizontal="center", vertical="center")
-        ws.cell(row=index, column=5).alignment = Alignment(horizontal="center", vertical="center")
+        for col in range(2, 8):
+            ws.cell(row=index, column=col).number_format = "@"
+        ws.cell(row=index, column=8).number_format = "@"
+        ws.cell(row=index, column=8).alignment = Alignment(horizontal="center", vertical="center")
+        ws.cell(row=index, column=9).alignment = Alignment(horizontal="center", vertical="center")
 
     max_row = max(len(columns) + 1, 2)
-    apply_border(ws, 1, max_row, 1, 5)
-    add_list_validation(ws, f"B2:B{max_row}", operator_display_values(op_builder), allow_blank=True)
-    add_value_dropdowns(ws, columns, named_ranges)
-    digits_displays = digits_operator_displays(op_builder)
-    add_digits_validations(ws, f"D2:D{max_row}", digits_displays)
-    add_list_validation(ws, f"E2:E{max_row}", ["YES", "NO"], allow_blank=True)
+    apply_border(ws, 1, max_row, 1, 9)
+    add_value_dropdowns(ws, columns, named_ranges, (2, 3))
+    add_digits_validation(ws, f"H2:H{max_row}")
+    add_list_validation(ws, f"I2:I{max_row}", ["YES", "NO"], allow_blank=True)
     yellow_fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
     ws.conditional_formatting.add(
-        f"A2:E{max_row}",
-        FormulaRule(formula=["NOT(ISBLANK($B2))"], stopIfTrue=False, fill=yellow_fill),
+        f"A2:I{max_row}",
+        FormulaRule(formula=["COUNTA($B2:$G2)>0"], stopIfTrue=False, fill=yellow_fill),
     )
     inactive_fill = PatternFill(start_color="E7E6E6", end_color="E7E6E6", fill_type="solid")
     inactive_font = Font(color="A6A6A6")
-    digit_checks = ",".join(f"$B2={excel_string_literal(display)}" for display in digits_displays)
-    inactive_formula = f"NOT(OR({digit_checks}))" if digit_checks else "TRUE"
     ws.conditional_formatting.add(
-        f"D2:D{max_row}",
-        FormulaRule(formula=[inactive_formula], stopIfTrue=False, fill=inactive_fill, font=inactive_font),
+        f"H2:H{max_row}",
+        FormulaRule(formula=["AND(ISBLANK($E2), ISBLANK($G2))"], stopIfTrue=False, fill=inactive_fill, font=inactive_font),
     )
-    ws.print_area = f"A1:E{max_row}"
+    ws.print_area = f"A1:I{max_row}"
 
 
 def setup_reference_sheet(ws, op_builder):
     ws.title = "Tham chiếu"
     operator_rows = [["Toán tử", "Ý nghĩa", "Cách nhập Giá trị", "Ví dụ", "Có Digits?"]]
+    operator_details = {
+        "eq": ["Bằng", "Trùng đúng", "1 giá trị hoặc nhiều cách phẩy (tự IN)", "CN, KR", "Không"],
+        "in": ["Trong danh sách", "Thuộc list", "Nhiều cách phẩy", "CN, KR, JP", "Không"],
+        "between": ["Trong khoảng", "Giữa 2 mốc", "Đúng 2 giá trị cách phẩy", "1000, 5000", "Không"],
+        "prefix": ["Bắt đầu bằng", "Prefix", "1 hoặc nhiều cách phẩy", "8306, 8307", "Có"],
+        "contains": ["Chứa", "Substring", "1 hoặc nhiều cách phẩy", "laptop, gaming", "Không"],
+        "suffix": ["Kết thúc bằng", "Suffix", "1 hoặc nhiều cách phẩy", "AA, BB", "Có"],
+    }
     for key, display in op_builder.display_labels():
-        spec = op_builder.operators[key]
-        operator_rows.append(
-            [
-                display,
-                display,
-                spec.get("hint", ""),
-                spec.get("example", ""),
-                "Có" if spec.get("supports_digits") else "Không",
-            ]
-        )
+        row = list(operator_details.get(key) or [display, display, "", "", ""])
+        row[0] = display
+        row[4] = "Có" if (op_builder.operators.get(key) or {}).get("supports_digits") else row[4]
+        operator_rows.append(row)
     sections = operator_rows + [
         [],
         ["Digits", "Ghi chú"],
         [
-            "Chỉ dùng với operator hỗ trợ Digits",
-            "Điền số nguyên = độ dài chuỗi kỳ vọng. Bỏ trống nếu không constrain độ dài.",
+            "Định nghĩa",
+            "Digits = số ký tự bạn muốn match từ bên trái (Bắt đầu bằng) hoặc bên phải (Kết thúc bằng) của cột trong DB.",
         ],
-        ["Ví dụ", "HS Code bắt đầu bằng 84 + Digits 4 chỉ khớp mã 4 ký tự bắt đầu bằng 84."],
+        ["Digits trống", "Không validate độ dài, tool dùng value nguyên."],
+        ["Digits có giá trị", "Mọi value bạn điền phải có đúng số ký tự = Digits."],
+        [
+            "Ví dụ 1",
+            "Bắt đầu bằng = 8306, 8307, 8308, 8309; Digits = 4 -> match mọi HS bắt đầu bằng 4 mã này.",
+        ],
+        [
+            "Ví dụ 2",
+            "Bắt đầu bằng = 0301234567; Digits = 10 -> match cả MST 10 số và MST 13 số bắt đầu bằng 10 số này.",
+        ],
+        ["Ví dụ lỗi", "Bắt đầu bằng = 84; Digits = 4 -> LỖI vì value có 2 ký tự, không đủ 4 ký tự."],
+        [
+            "Gợi ý",
+            "2 chapter HS; 4 heading HS; 6 subheading HS; 8 tariff; 10 MST chính hoặc HS national; 13 MST phụ thuộc.",
+        ],
         [],
-        ["Bảng = both", "Ghi chú"],
-        ["both", "Điền cả Cột Export và Cột Import. Runner xuất 2 sheet Export và Import."],
-        ["Một sheet trống", "Sheet đó vẫn được xuất trống, không lỗi."],
+        ["Combine op cùng row", "Ghi chú"],
+        ["Nhiều cell op", "Bạn có thể điền value vào nhiều cell op cùng 1 row. Tool tự AND các filter đó lại."],
+        ["Ví dụ prefix", "Row ma_so_hang_hoa: Bắt đầu bằng = 84, 85"],
+        ["Ví dụ suffix", "Row ma_so_hang_hoa: Kết thúc bằng = 00"],
+        ["Ví dụ digits", "Digits = 10 nếu muốn tier national code."],
+        ["SQL logic", "(ma_so LIKE '84%' OR '85%') AND ma_so LIKE '%00'"],
+        ["Cell op trống", "Op không active."],
         [],
         ["Cột", "Mục đích"],
         ["Cột", "Tên cột DB đã điền sẵn, chỉ là visual reference."],
-        ["Toán tử", "Cách so sánh. Để trống nếu chỉ muốn xuất cột này."],
-        ["Giá trị", "Giá trị cần tìm. Bắt buộc nếu có Toán tử."],
-        ["Digits", "Độ dài chuỗi khi dùng operator bắt đầu/kết thúc bằng."],
+        ["Bằng/Trong danh sách/...", "Mỗi toán tử là 1 ô riêng. Điền value vào ô muốn dùng."],
+        ["Digits", "Độ dài value khi dùng Bắt đầu bằng hoặc Kết thúc bằng."],
         ["Lấy về?", "YES = cột này có trong file kết quả. NO/trống = không."],
         [],
         ["Cú pháp Tháng", "Ý nghĩa"],
@@ -1493,7 +1783,7 @@ def setup_reference_sheet(ws, op_builder):
                     top=Side(style="thin", color="BFBFBF"),
                     bottom=Side(style="thin", color="BFBFBF"),
                 )
-    header_rows = [1, 9, 13, 18, 26, 32]
+    header_rows = [1, 9, 18, 26, 32, 38]
     for row in header_rows:
         style_table_header(ws, row, 5 if row == 1 else 2)
 

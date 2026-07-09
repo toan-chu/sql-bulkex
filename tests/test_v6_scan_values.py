@@ -64,7 +64,7 @@ class ValueScanCursor:
         if "reltuples" in query_text:
             self.rows = [(1000,)]
             return
-        if "AVG(LENGTH" in query_text:
+        if "AVG(char_length" in query_text:
             column = self._column_from_query(query_text)
             self.rows = [(self.avg_lengths.get(column, 10),)]
             return

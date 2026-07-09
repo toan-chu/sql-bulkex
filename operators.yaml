@@ -33,19 +33,18 @@ operators:
     example: "84, 85"
     sql_single: "{col} LIKE {val_prefix}"
     sql_multi: "({col} LIKE ANY({vals_prefix}))"
-    sql_single_with_digits: "{col} LIKE {val_prefix} AND LENGTH({col}) = {digits}"
-    sql_multi_with_digits: "({col} LIKE ANY({vals_prefix})) AND LENGTH({col}) = {digits}"
     multi_value: true
     arity:
     supports_digits: true
 
   contains:
     display: "Chứa"
-    hint: "1 chuỗi"
-    example: "laptop"
+    hint: "1 hoặc nhiều chuỗi, cách phẩy"
+    example: "laptop, gaming"
     sql_single: "{col} LIKE {val_contains}"
-    multi_value: false
-    arity: 1
+    sql_multi: "({col} LIKE ANY({vals_contains}))"
+    multi_value: true
+    arity:
     supports_digits: false
 
   suffix:
@@ -54,8 +53,6 @@ operators:
     example: "AA, BB"
     sql_single: "{col} LIKE {val_suffix}"
     sql_multi: "({col} LIKE ANY({vals_suffix}))"
-    sql_single_with_digits: "{col} LIKE {val_suffix} AND LENGTH({col}) = {digits}"
-    sql_multi_with_digits: "({col} LIKE ANY({vals_suffix})) AND LENGTH({col}) = {digits}"
     multi_value: true
     arity:
     supports_digits: true

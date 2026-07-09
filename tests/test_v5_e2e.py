@@ -37,6 +37,24 @@ def write_column_yaml(path, cfg):
     path.write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
 
+def make_legacy_v5_template(cfg, path):
+    wb = Workbook()
+    req = wb.active
+    req.title = "Request"
+    for row, label in enumerate(runner.REQUEST_V5_LABELS_ORDER, 1):
+        req.cell(row=row, column=1, value=label)
+    ws = wb.create_sheet("Cột Export")
+    ws.append(["Cột", "Toán tử", "Giá trị", "Lấy về?"])
+    for column in cfg["datasets"]["export"]["columns"]:
+        ws.append([column, None, None, None])
+    ws_import = wb.create_sheet("Cột Import")
+    ws_import.append(["Cột", "Toán tử", "Giá trị", "Lấy về?"])
+    for column in cfg["datasets"]["import"]["columns"]:
+        ws_import.append([column, None, None, None])
+    wb.save(path)
+    return path
+
+
 class InfoSchemaCursor:
     def __init__(self, table_columns):
         self.table_columns = table_columns
@@ -121,13 +139,16 @@ def fill_request(template_path, request_path, anchors, outputs, values=None):
 
 def patch_v5_boundaries(monkeypatch, tmp_path, table_columns, row_count=2):
     last_state = {}
-    original_make_jobs = runner.portal.make_jobs
     conn = FakeConn(table_columns)
 
-    def make_jobs_capture(state, cur):
+    def build_jobs_capture(request, dataset_name, dataset_result, cur, op_builder=None):
         last_state.clear()
-        last_state.update(state)
-        return original_make_jobs(state, cur)
+        last_state["filters"] = list(dataset_result["filters"])
+        last_state["cols"] = list(dataset_result["select_cols"])
+        return (
+            dataset_result["dataset"]["database"],
+            ([("job", dataset_result["dataset"]["database"], "SQL", [])], [("Dataset", dataset_name)], list(dataset_result["select_cols"])),
+        )
 
     def fake_export(conn, query, params, headers, filepath, notes):
         wb = Workbook()
@@ -144,7 +165,7 @@ def patch_v5_boundaries(monkeypatch, tmp_path, table_columns, row_count=2):
 
     monkeypatch.setattr(runner.portal, "connect", lambda cfg, dbname: FakeConn(table_columns))
     monkeypatch.setattr(runner.portal, "get_conn", lambda conns, cfg, dbname: conn)
-    monkeypatch.setattr(runner.portal, "make_jobs", make_jobs_capture)
+    monkeypatch.setattr(runner, "build_jobs_from_v6_dataset", build_jobs_capture)
     monkeypatch.setattr(runner.portal, "count_rows", lambda cur, query, params: row_count)
     monkeypatch.setattr(runner, "fetch_headers", lambda conn, query, params: list(last_state["cols"]))
     monkeypatch.setattr(runner, "export_xlsx_v5_with_note", fake_export)
@@ -168,6 +189,7 @@ def test_t20_v5_full_flow_scan_template_run_once(monkeypatch, tmp_path):
 
     runner.scan_columns(column_path=column_path, cfg={"_password": "secret"}, yes=True)
     assert runner.main(["--make-template"]) == 0
+    make_legacy_v5_template(runner.load_column_config(column_path), template_path)
     fill_request(
         template_path,
         requests / "request.xlsx",
@@ -205,7 +227,7 @@ def test_t20_v5_full_flow_scan_template_run_once(monkeypatch, tmp_path):
 def test_t21_v5_complex_case_builds_10_filters_and_20_selects(monkeypatch, tmp_path):
     columns = [f"f_{i:02d}" for i in range(1, 11)] + [f"out_{i:02d}" for i in range(1, 11)]
     table_columns = {"x_y2025_01": columns}
-    runner.make_request_template_v5(initial_column_cfg(columns=columns), tmp_path / "template.xlsx")
+    make_legacy_v5_template(initial_column_cfg(columns=columns), tmp_path / "template.xlsx")
     request_path = fill_request(
         tmp_path / "template.xlsx",
         tmp_path / "request.xlsx",
@@ -228,7 +250,7 @@ def test_t22_v5_auto_default_uses_prefix_like_param(tmp_path):
     template = tmp_path / "template.xlsx"
     request = tmp_path / "request.xlsx"
     cfg = initial_column_cfg(columns=columns, defaults={"ma_so_hang_hoa": "prefix"})
-    runner.make_request_template_v5(cfg, template)
+    make_legacy_v5_template(cfg, template)
     fill_request(
         template,
         request,
