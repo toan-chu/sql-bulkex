@@ -1,6 +1,16 @@
-input_dir: "requests"
-output_dir: "exports"
+folders:
+  pending: "C:/Users/admin/OneDrive/SQL-BulkEx-Workspace/01_Pending"
+  approved: "C:/Users/admin/OneDrive/SQL-BulkEx-Workspace/02_Approved"
+  output: "C:/Users/admin/OneDrive/SQL-BulkEx-Workspace/03_Output"
 poll_seconds: 120
 filename_pattern: "{ts}_{user}_{request}"
 max_rows_auto: 300000
 max_rows_hard: 3000000
+onedrive_freeup:
+  enabled: true
+  approved_delay_hours: 2
+  output_delay_days: 7
+log:
+  requests_csv: "log/requests.csv"
+  runner_log: "log/runner.log"
+  portal_log: "log/portal.log"

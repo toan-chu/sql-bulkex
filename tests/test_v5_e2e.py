@@ -221,7 +221,7 @@ def test_t20_v5_full_flow_scan_template_run_once(monkeypatch, tmp_path):
     assert len(rows) == 3
     assert len(last_state["filters"]) == 2
     assert len(last_state["cols"]) == 22
-    assert (requests / "processed").exists()
+    assert (requests / "[DONE] request.xlsx").exists()
 
 
 def test_t21_v5_complex_case_builds_10_filters_and_20_selects(monkeypatch, tmp_path):

@@ -125,12 +125,28 @@ operator_defaults:
 ### 6. Trỏ folder OneDrive/GDrive trong `settings.yaml`
 
 ```yaml
-input_dir: "C:/Users/xxx/OneDrive/SQL_Requests/inbox"
-output_dir: "C:/Users/xxx/OneDrive/SQL_Requests/results"
+folders:
+  pending: "C:/Users/xxx/OneDrive/SQL-BulkEx-Workspace/01_Pending"
+  approved: "C:/Users/xxx/OneDrive/SQL-BulkEx-Workspace/02_Approved"
+  output: "C:/Users/xxx/OneDrive/SQL-BulkEx-Workspace/03_Output"
 poll_seconds: 120
 max_rows_auto: 300000
 max_rows_hard: 3000000
+onedrive_freeup:
+  enabled: true
+  approved_delay_hours: 2
+  output_delay_days: 7
+log:
+  requests_csv: "log/requests.csv"
+  runner_log: "log/runner.log"
+  portal_log: "log/portal.log"
 ```
+
+Workflow:
+- Sales copy file request vào `01_Pending`.
+- Admin review rồi kéo file sang `02_Approved`.
+- Runner chỉ quét `02_Approved`; file ở `01_Pending` không bị xử lý.
+- Kết quả xuất ra `03_Output`.
 
 ### 7. Sinh Excel template cho sales
 
@@ -138,7 +154,7 @@ max_rows_hard: 3000000
 python runner.py --make-template
 ```
 
-Copy file `request_template.xlsx` sang folder OneDrive `inbox/` cho sales.
+Copy file `request_template.xlsx` sang folder OneDrive `01_Pending/` cho sales.
 
 ### 8. Bật runner nền qua Task Scheduler
 
@@ -193,6 +209,9 @@ Sau khi chạy, PowerShell in ra: `SUCCESS: The scheduled task "SQL BulkEx Runne
 ```powershell
 # Xem task tồn tại
 schtasks /query /tn "SQL BulkEx Runner"
+
+# Runner chỉ poll folder settings.yaml -> folders.approved
+# File ở 01_Pending phải chờ admin kéo sang 02_Approved.
 
 # Xem log runner realtime (mỗi 2 phút phải có dòng mới nếu có request)
 Get-Content "<PATH_REPO>\log\runner.log" -Tail 20 -Wait
@@ -334,7 +353,7 @@ Logs: `log/runner.log` (runner), `log/portal.log` (portal).
 - `connection.yaml` commit git với `password: ""`. Password thật ở `.password` (gitignored).
 - `column.yaml` có thể commit (không chứa secret, chỉ tên bảng/cột).
 - **Không đặt repo bên trong folder cloud-sync** — dễ leak file `.password` lên cloud.
-- Share dữ liệu = share quyền truy cập folder `output_dir`.
+- Share dữ liệu = share quyền truy cập folder `folders.output`.
 - Máy giữ DB phải luôn bật khi giờ hành chính (single point of failure — chuyển từ 1 người biết SQL sang 1 máy).
 
 ---

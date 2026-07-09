@@ -190,7 +190,8 @@ def test_process_request_v5_yes_runs_and_moves_processed(monkeypatch, tmp_path):
 
     moved = runner.process_request_file_v5(request_path, {}, {}, settings, {})
 
-    assert moved.parent.name == "processed"
+    assert moved.parent == tmp_path
+    assert moved.name == "[DONE] request.xlsx"
     assert list((tmp_path / "out").glob("*.xlsx"))
 
 
@@ -342,7 +343,7 @@ def test_run_once_renames_validation_error_in_place(monkeypatch, tmp_path):
     assert "lỗi dễ hiểu" in txt.read_text(encoding="utf-8")
 
 
-def test_run_once_twice_does_not_process_processed_file(monkeypatch, tmp_path):
+def test_run_once_twice_does_not_process_done_file(monkeypatch, tmp_path):
     requests = tmp_path / "requests"
     requests.mkdir()
     request = write_legacy_workbook(requests / "request.xlsx")
@@ -350,7 +351,7 @@ def test_run_once_twice_does_not_process_processed_file(monkeypatch, tmp_path):
 
     def process(path, cfg, conns, settings):
         seen.append(Path(path).name)
-        return runner.move_request(path, "processed")
+        return runner.mark_done(path)
 
     monkeypatch.setattr(runner, "process_request_file", process)
     settings = {"input_dir": str(requests), "output_dir": str(tmp_path / "out")}

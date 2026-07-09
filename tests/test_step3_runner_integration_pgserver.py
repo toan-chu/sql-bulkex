@@ -77,4 +77,4 @@ def test_runner_v5_request_end_to_end_pgserver(monkeypatch, tmp_path, pg_uri):
     assert rows[0] == ("ma_so_hang_hoa", "ma_nuoc_xuat_xu", "out_01")
     assert rows[1] == ("843610", "CN", "match")
     assert len(rows) == 2
-    assert (requests / "processed").exists()
+    assert (requests / "[DONE] request.xlsx").exists()

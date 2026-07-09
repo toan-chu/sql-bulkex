@@ -37,6 +37,8 @@ TMP_DIR = LOG_DIR / "tmp"
 RUNNER_LOG_FILE = LOG_DIR / "runner.log"
 XLSX_ROW_LIMIT = 1_000_000
 REJECT_PREFIX = "[LOI]_"
+DONE_PREFIX = "[DONE] "
+DONE_TIMESTAMP_PREFIX = "[DONE "
 REQUEST_V5_LABELS_ORDER = [
     "Người yêu cầu",
     "Bảng",
@@ -87,6 +89,27 @@ REQUEST_V5_LABELS = {
 }
 
 DEFAULT_SETTINGS = {
+    "folders": {
+        "pending": str(BASE_DIR / "SQL-BulkEx-Workspace" / "01_Pending"),
+        "approved": str(BASE_DIR / "SQL-BulkEx-Workspace" / "02_Approved"),
+        "output": str(BASE_DIR / "SQL-BulkEx-Workspace" / "03_Output"),
+    },
+    "poll_seconds": 120,
+    "filename_pattern": "{ts}_{user}_{request}",
+    "max_rows_auto": 300000,
+    "max_rows_hard": 3000000,
+    "onedrive_freeup": {
+        "enabled": True,
+        "approved_delay_hours": 2,
+        "output_delay_days": 7,
+    },
+    "log": {
+        "requests_csv": str(BASE_DIR / "log" / "requests.csv"),
+        "runner_log": str(RUNNER_LOG_FILE),
+        "portal_log": str(LOG_DIR / "portal.log"),
+    },
+}
+LEGACY_DEFAULT_SETTINGS = {
     "input_dir": str(BASE_DIR / "requests"),
     "output_dir": str(BASE_DIR / "exports"),
     "poll_seconds": 120,
@@ -94,6 +117,10 @@ DEFAULT_SETTINGS = {
     "max_rows_auto": 300000,
     "max_rows_hard": 3000000,
 }
+V5_SETTINGS_WARNING = (
+    "WARNING deprecation: settings.yaml đang dùng schema v5, "
+    "migrate sang folders.pending/approved/output"
+)
 
 
 class RequestError(Exception):
@@ -130,8 +157,29 @@ def load_yaml_file(path, default):
     return data
 
 
-def load_settings(path=SETTINGS_FILE):
-    return load_yaml_file(path, DEFAULT_SETTINGS)
+def load_settings(path=None):
+    path = Path(path or SETTINGS_FILE)
+    if not path.exists():
+        return dict(DEFAULT_SETTINGS)
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    if "folders" not in data and "input_dir" in data:
+        merged = dict(LEGACY_DEFAULT_SETTINGS)
+        merged.update(data)
+        merged["_deprecated_v5_schema"] = True
+        return merged
+    merged = dict(DEFAULT_SETTINGS)
+    merged.update(data)
+    folders = dict(DEFAULT_SETTINGS["folders"])
+    folders.update(data.get("folders") or {})
+    merged["folders"] = folders
+    onedrive_freeup = dict(DEFAULT_SETTINGS["onedrive_freeup"])
+    onedrive_freeup.update(data.get("onedrive_freeup") or {})
+    merged["onedrive_freeup"] = onedrive_freeup
+    log_cfg = dict(DEFAULT_SETTINGS["log"])
+    log_cfg.update(data.get("log") or {})
+    merged["log"] = log_cfg
+    return merged
 
 
 def write_yaml_file(path, data):
@@ -1160,13 +1208,24 @@ def estimate_mb(rows, columns):
 
 
 def output_dir(settings):
-    path = Path(settings.get("output_dir") or DEFAULT_SETTINGS["output_dir"])
+    folders = settings.get("folders") or {}
+    path = Path(folders.get("output") or settings.get("output_dir") or LEGACY_DEFAULT_SETTINGS["output_dir"])
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def input_dir(settings):
-    path = Path(settings.get("input_dir") or DEFAULT_SETTINGS["input_dir"])
+    path = Path(settings.get("input_dir") or LEGACY_DEFAULT_SETTINGS["input_dir"])
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def approved_dir(settings):
+    folders = settings.get("folders") or {}
+    if folders.get("approved"):
+        path = Path(folders["approved"])
+    else:
+        path = input_dir(settings)
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -1295,6 +1354,19 @@ def move_request(path, folder_name):
     return move_finished_file(path, target_dir / f"{stamp}_{path.name}")
 
 
+def done_path_for(path, now=None):
+    path = Path(path)
+    direct = path.with_name(f"{DONE_PREFIX}{path.name}")
+    if not direct.exists():
+        return direct
+    stamp = (now or dt.datetime.now()).strftime("%Y%m%d_%H%M%S")
+    return unique_path(path.with_name(f"[DONE {stamp}] {path.name}"))
+
+
+def mark_done(path):
+    return move_finished_file(path, done_path_for(path))
+
+
 def move_to_error(path, message):
     path = Path(path)
     moved = move_finished_file(path, path.with_name(f"{REJECT_PREFIX}{path.name}"))
@@ -1352,7 +1424,7 @@ def prepare_v6_dataset_jobs(dataset_name, dataset_result, request, cfg, conns, s
     }
 
 
-def process_request_file_v5(path, cfg, conns, settings, column_cfg):
+def process_request_file_v6(path, cfg, conns, settings, column_cfg):
     op_builder = load_operator_builder()
     parsed = parse_request_v6(path, column_cfg, op_builder)
     request = parsed["request"]
@@ -1373,7 +1445,7 @@ def process_request_file_v5(path, cfg, conns, settings, column_cfg):
         counts = export_xlsx_v6_both(prepared, tmp_path, all_notes)
         final = move_finished_file(tmp_path, final_path)
         log_event(f"Exported {final.name}: {counts}")
-        moved = move_request(path, "processed")
+        moved = mark_done(path)
         log_event(f"Processed request {path.name} -> {moved}")
         return moved
 
@@ -1412,19 +1484,22 @@ def process_request_file_v5(path, cfg, conns, settings, column_cfg):
             move_finished_file(txt_src, final.with_suffix(".txt"))
         log_event(f"Exported {final.name}: {exported} rows")
 
-    moved = move_request(path, "processed")
+    moved = mark_done(path)
     log_event(f"Processed request {path.name} -> {moved}")
     return moved
 
 
 def process_request_file(path, cfg, conns, settings):
     if is_v5_request_file(path):
-        return process_request_file_v5(path, cfg, conns, settings, load_column_config())
+        return process_request_file_v6(path, cfg, conns, settings, load_column_config())
 
     raise RequestError(
         "File request không đúng mẫu v5. Vui lòng tạo lại từ request_template.xlsx mới "
         "bằng lệnh: python runner.py --make-template."
     )
+
+
+process_request_file_v5 = process_request_file_v6
 
 
 def is_file_stable(path, wait_seconds=5):
@@ -1435,21 +1510,31 @@ def is_file_stable(path, wait_seconds=5):
     return first == second
 
 
-def request_files(settings, stable_wait=5):
-    root = input_dir(settings)
+def request_files_v6(settings, stable_wait=5):
+    root = approved_dir(settings)
+    files = []
     for path in sorted(root.glob("*.xlsx")):
         if path.name.startswith("~$"):
             continue
         if path.name.startswith(REJECT_PREFIX):
             continue
+        if path.name.startswith(DONE_PREFIX) or path.name.startswith(DONE_TIMESTAMP_PREFIX):
+            continue
         if not is_file_stable(path, stable_wait):
             log_event(f"Skip unstable file: {path.name}")
             continue
-        yield path
+        files.append(path)
+    return files
+
+
+def request_files(settings, stable_wait=5):
+    return request_files_v6(settings, stable_wait=stable_wait)
 
 
 def run_once(settings=None, cfg=None, stable_wait=5):
     settings = load_settings() if settings is None else settings
+    if settings.get("_deprecated_v5_schema"):
+        log_event(V5_SETTINGS_WARNING)
     cfg = load_connection_config() if cfg is None else cfg
     conns = {}
     processed = 0
