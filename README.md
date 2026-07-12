@@ -56,9 +56,25 @@ mat_khau_db_cua_ban_o_day
 
 Điền host, port, user, database name (giữ `password: ""` — runner sẽ đọc từ `.password`).
 
-### Bước 5 — Tạo 3 folder trong OneDrive
+### Bước 5 — Nháy đúp `setup.bat` ✨ (setup tự động, không gõ gì cả)
 
-Ví dụ trong OneDrive tạo folder `SQL-BulkEx-Workspace` với 3 subfolder:
+Mở folder repo, **nháy đúp chuột vào file `setup.bat`**. Wizard tự làm 3 việc:
+
+1. 📁 Tự dò các folder OneDrive / SharePoint đã sync trên máy → bạn chỉ gõ **số** để chọn
+2. ⚙️ Tự tạo 3 folder workspace + tự ghi đường dẫn vào `settings.yaml`
+3. 🕐 Tự cài 2 lịch chạy nền vào Task Scheduler (runner mỗi 2 phút, cleanup mỗi giờ)
+
+Màn hình sẽ hiện kiểu này:
+
+```
+=== Folder OneDrive / SharePoint tim thay tren may ===
+  [1] C:\Users\admin\OneDrive - Công ty ABC
+  [2] C:\Users\admin\Công ty ABC\Data - Documents
+  [0] Nhap path thu cong
+Chon noi dat workspace [1-2 hoac 0]: 2
+```
+
+Gõ số → Enter → xong. Wizard tự tạo cấu trúc:
 
 ```
 📁 SQL-BulkEx-Workspace/
@@ -67,32 +83,11 @@ Ví dụ trong OneDrive tạo folder `SQL-BulkEx-Workspace` với 3 subfolder:
 └── 📁 03_Output     ← Runner đặt file kết quả vào đây
 ```
 
-### Bước 6 — Chỉnh `settings.yaml`
+💡 Chọn `[0]` nếu muốn dán path bất kỳ (VD folder local trên máy để test, không cần OneDrive).
 
-Điền đường dẫn 3 folder trên vào (dùng đường dẫn tuyệt đối):
+💡 Không cần sửa `settings.yaml` bằng tay, không cần gõ lệnh `schtasks` — wizard lo hết.
 
-```yaml
-folders:
-  pending: "C:/Users/admin/OneDrive/SQL-BulkEx-Workspace/01_Pending"
-  approved: "C:/Users/admin/OneDrive/SQL-BulkEx-Workspace/02_Approved"
-  output: "C:/Users/admin/OneDrive/SQL-BulkEx-Workspace/03_Output"
-
-onedrive_freeup:
-  enabled: true
-  approved_delay_hours: 2      # File đã chạy > 2 giờ → dọn về cloud-only
-  output_delay_days: 7         # File output > 7 ngày → dọn về cloud-only
-
-log:
-  requests_csv: "log/requests.csv"
-  runner_log: "log/runner.log"
-  portal_log: "log/portal.log"
-
-poll_seconds: 120              # Runner poll folder mỗi 2 phút
-max_rows_auto: 300000
-max_rows_hard: 3000000
-```
-
-### Bước 7 — Quét cột + giá trị từ database
+### Bước 6 — Quét cột + giá trị từ database
 
 3 lệnh, mỗi lệnh 1-2 phút:
 
@@ -102,49 +97,65 @@ python runner.py --scan-values --yes     # Quét giá trị cột cardinality th
 python runner.py --make-template         # Sinh request_template.xlsx v6
 ```
 
-### Bước 8 — Copy template lên OneDrive
+### Bước 7 — Copy template lên OneDrive
 
 Copy `request_template.xlsx` mới sinh vào folder `01_Pending` để Sales biết mẫu chuẩn tải về.
 
-### Bước 9 — Cài 2 Task Scheduler (script tự chạy nền)
+✅ Xong. Từ giờ máy admin chỉ cần bật (không cần đăng nhập ngồi ngoài terminal). Runner tự chạy nền.
 
-**Task 1 — Runner poll file duyệt mỗi 2 phút:**
+---
+
+## 🕐 Runner chạy nền ở đâu? Kiểm tra / tạm dừng / tắt thế nào?
+
+Runner **không phải app đang mở** — Windows **Task Scheduler** gọi nó dậy mỗi 2 phút, chạy xong tự thoát, nên bạn sẽ không thấy cửa sổ nào cả. Muốn xem/tắt nó thì vào Task Scheduler.
+
+### 🖱️ Cách 1 — Bằng giao diện (dễ nhất, khuyên dùng)
+
+1. Nhấn phím `Win`, gõ **Task Scheduler**, Enter
+2. Click **Task Scheduler Library** ở cột bên trái
+3. Tìm 2 dòng: **SQL BulkEx Runner** và **SQL BulkEx Cleanup**
+
+| Cột | Ý nghĩa |
+|---|---|
+| **Status** = `Ready` | ✅ Đang hoạt động bình thường (chờ tới giờ chạy) |
+| **Status** = `Running` | 🏃 Đang chạy ngay lúc này |
+| **Status** = `Disabled` | ⏸️ Đã tạm dừng |
+| **Last Run Time** | Lần chạy gần nhất |
+| **Last Run Result** = `(0x0)` | Lần chạy gần nhất thành công |
+
+4. **Chuột phải** vào task để điều khiển:
+
+| Chọn | Tác dụng |
+|---|---|
+| **Run** | ▶️ Chạy ngay, không đợi 2 phút (test nhanh) |
+| **Disable** | ⏸️ Tạm dừng — không chạy nữa nhưng cài đặt vẫn còn, bật lại lúc nào cũng được |
+| **Enable** | ▶️ Bật lại sau khi Disable |
+| **Delete** | 🗑️ Xoá hẳn (muốn cài lại thì chạy `setup.bat` lần nữa) |
+
+### ⌨️ Cách 2 — Bằng lệnh PowerShell
 
 ```powershell
-schtasks /create /tn "SQL BulkEx Runner" /sc minute /mo 2 ^
-  /tr "\"C:\Python313\pythonw.exe\" \"C:\Users\admin\Downloads\GIT\sql-bulkex\runner.py\" --once" /f
-```
-
-**Task 2 — Cleanup OneDrive Files On-Demand mỗi giờ:**
-
-```powershell
-schtasks /create /tn "SQL BulkEx Cleanup" /sc hourly /mo 1 /st 00:30 ^
-  /tr "\"C:\Python313\pythonw.exe\" \"C:\Users\admin\Downloads\GIT\sql-bulkex\runner.py\" --cleanup" /f
-```
-
-Chỉnh đường dẫn `pythonw.exe` và repo theo máy bạn (dùng `where pythonw` để tìm).
-
-**Kiểm tra task đã cài chưa:**
-
-```powershell
+# Kiểm tra task có đang hoạt động không
 schtasks /query /tn "SQL BulkEx Runner"
 schtasks /query /tn "SQL BulkEx Cleanup"
-```
 
-**Chạy thử ngay (không đợi 2 phút):**
-
-```powershell
+# Chạy thử ngay (không đợi 2 phút)
 schtasks /run /tn "SQL BulkEx Runner"
-```
 
-**Tắt tạm task:**
-
-```powershell
+# Tạm dừng
 schtasks /change /tn "SQL BulkEx Runner" /disable
 schtasks /change /tn "SQL BulkEx Cleanup" /disable
+
+# Bật lại
+schtasks /change /tn "SQL BulkEx Runner" /enable
+schtasks /change /tn "SQL BulkEx Cleanup" /enable
+
+# Xoá hẳn (cài lại = chạy setup.bat)
+schtasks /delete /tn "SQL BulkEx Runner" /f
+schtasks /delete /tn "SQL BulkEx Cleanup" /f
 ```
 
-✅ Xong. Từ giờ máy admin chỉ cần bật (không cần đăng nhập ngồi ngoài terminal). Runner tự chạy nền.
+💡 **Runner có đang thực sự làm việc không?** Mở file `log/runner.log` trong folder repo — mỗi lần runner thức dậy quét folder đều ghi 1 dòng kèm giờ.
 
 ---
 
@@ -360,7 +371,7 @@ onedrive_freeup:
   output_delay_days: 7         # File output > 7 ngày → cloud-only
 ```
 
-Task Scheduler task 2 (đã cài ở Bước 9) chạy `--cleanup` mỗi giờ tự động.
+Task Scheduler task 2 (`setup.bat` đã cài tự động ở Bước 5) chạy `--cleanup` mỗi giờ.
 
 **Muốn xem file cloud-only:** vào OneDrive Explorer, file có icon ☁️ = cloud-only (chưa download), icon ✅ = đang có trên máy. Click vào file cloud-only → OneDrive tự tải về.
 
@@ -429,7 +440,7 @@ python -m pytest -q
 | Digits bị reject | Kiểm tra độ dài value có bằng Digits không (mọi element trong list phải cùng độ dài) |
 | Cleanup không dọn file | Kiểm tra `onedrive_freeup.enabled: true` trong settings.yaml + OneDrive Files On-Demand đang bật |
 | Log CSV không update | Đóng file `log/requests.csv` trong Excel, runner sẽ retry request kế tiếp |
-| Runner không chạy background | Kiểm tra Task Scheduler: `schtasks /query /tn "SQL BulkEx Runner"` — status phải là `Ready` hoặc `Running` |
+| Runner không chạy background | Mở Task Scheduler kiểm tra (xem mục "🕐 Runner chạy nền ở đâu?") — status phải là `Ready` hoặc `Running`. Nếu task biến mất → chạy lại `setup.bat` |
 | Password sai | Kiểm tra file `.password` — chỉ 1 dòng, không có space đầu/cuối |
 
 ---
@@ -482,6 +493,7 @@ Rồi thêm `neq` vào `display_order`. Regen template. Xong.
 
 | File | Mục đích |
 |------|----------|
+| `setup.bat` + `setup.py` | Wizard cài đặt 1 lần: dò OneDrive, tạo folder, ghi settings, cài Task Scheduler |
 | `runner.py` | Script chính, chạy qua CLI |
 | `portal.py` | Terminal tool tương tác (giữ từ v5, không đổi) |
 | `operators.py` + `operators.yaml` | Registry 6 operator, thêm op mới không cần sửa Python |

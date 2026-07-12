@@ -66,7 +66,6 @@ datasets:
       phan_loai_nhap_thue_suat_thue_xuat_khau: 1
       so_tien_thue_xuat_khau: 41
       ma_mien_giam_khong_chiu_thue_xuat_khau: 21
-      mo_ta_hang_hoa: 484453
     value_cache:
       phuong_thuc_van_chuyen:
       - A
@@ -1336,6 +1335,7 @@ datasets:
       phan_loai_giay_phep_nhap_khau_1: 147
       ma_bieu_thue_nhap_khau: 20
       ma_mien_giam_khong_chiu_thue_nhap_khau: 29
+      mo_ta_hang_hoa: 613211
     value_cache:
       phuong_thuc_van_chuyen:
       - A
