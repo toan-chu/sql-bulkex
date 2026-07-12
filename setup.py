@@ -132,6 +132,18 @@ def install_tasks():
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode == 0:
             print(f"OK  Task Scheduler: {name}")
+            # Mac dinh schtasks chi chay khi cam sac -> tat dieu kien pin (laptop van chay)
+            ps = (
+                "$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries "
+                "-DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew; "
+                f"Set-ScheduledTask -TaskName '{name}' -Settings $s"
+            )
+            r2 = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                                capture_output=True, text=True)
+            if r2.returncode != 0:
+                print(f"    (canh bao: khong tat duoc dieu kien pin — "
+                      f"neu laptop chay pin, mo Task Scheduler > {name} > Conditions "
+                      f"> bo tick 'Start the task only if the computer is on AC power')")
         else:
             ok = False
             print(f"LOI Task '{name}': {(r.stderr or r.stdout).strip()}")
