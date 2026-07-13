@@ -102,8 +102,18 @@ def pick_from_list(title, items):
         print("Nhap so trong danh sach.")
 
 
+def pattern_to_regex(pattern):
+    """'x_y{year}_{month}' -> regex '^x_y\\d{4}_\\d{2}$' de match ten bang that."""
+    import re
+    esc = re.escape(str(pattern))
+    esc = esc.replace(re.escape("{year}"), r"\d{4}")
+    esc = esc.replace(re.escape("{month}"), r"\d{2}")
+    esc = esc.replace(re.escape("*"), ".*")
+    return f"^{esc}$"
+
+
 def detect_database():
-    """Ket noi PostgreSQL, liet ke database + schema, ghi vao column.yaml."""
+    """Quet MOI database x MOI schema, tim noi co bang khop pattern -> tu ghi column.yaml."""
     try:
         import portal
     except ImportError as e:
@@ -137,38 +147,73 @@ def detect_database():
         print("LOI: PostgreSQL chua co database nao (chua restore data?). Bo qua buoc nay.")
         return
 
-    if len(dbs) == 1:
-        dbname = dbs[0]
-        print(f"\nOK  Database duy nhat tren may: {dbname}")
-    else:
-        dbname = pick_from_list("Database tim thay tren may", dbs)
-
-    conn = portal.connect(cfg, dbname)
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT schema_name FROM information_schema.schemata "
-            "WHERE schema_name NOT IN ('pg_catalog','information_schema','pg_toast') ORDER BY 1"
-        )
-        schemas = [r[0] for r in cur.fetchall()]
-    conn.close()
-
     col_file = BASE_DIR / "column.yaml"
     if not col_file.exists():
         print("Khong thay column.yaml — bo qua.")
         return
     with open(col_file, encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
-    for name, ds in (data.get("datasets") or {}).items():
-        ds["database"] = dbname
-        old_schema = ds.get("schema", "")
-        if old_schema in schemas:
-            print(f"OK  dataset '{name}': schema '{old_schema}' co san trong {dbname}")
+    datasets = data.get("datasets") or {}
+    if not datasets:
+        print("column.yaml chua co dataset nao — bo qua.")
+        return
+
+    # Quet moi db x schema, dem so bang khop pattern cua tung dataset
+    hits = {name: [] for name in datasets}          # dataset -> [(db, schema, so_bang)]
+    all_tables = {}                                  # db -> [(schema, table)] de in khi khong khop
+    for db in dbs:
+        try:
+            conn = portal.connect(cfg, db)
+        except Exception:
+            continue
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT table_schema, table_name FROM information_schema.tables "
+                "WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY 1, 2"
+            )
+            rows = cur.fetchall()
+        conn.close()
+        all_tables[db] = rows
+        for name, ds in datasets.items():
+            import re
+            rx = re.compile(pattern_to_regex(ds.get("tables", "")))
+            count = {}
+            for schema, table in rows:
+                if rx.match(table):
+                    count[schema] = count.get(schema, 0) + 1
+            for schema, n in count.items():
+                hits[name].append((db, schema, n))
+
+    updated = False
+    for name, ds in datasets.items():
+        found = sorted(hits[name], key=lambda x: -x[2])
+        if len(found) == 1 or (found and found[0][2] > (found[1][2] if len(found) > 1 else 0)):
+            db, schema, n = found[0]
+            ds["database"], ds["schema"] = db, schema
+            updated = True
+            print(f"OK  dataset '{name}': {db} > {schema} ({n} bang khop pattern {ds['tables']})")
+        elif found:
+            choice = pick_from_list(
+                f"Dataset '{name}' khop nhieu noi, chon 1",
+                [f"{db} > {schema} ({n} bang)" for db, schema, n in found],
+            )
+            idx = [f"{db} > {schema} ({n} bang)" for db, schema, n in found].index(choice)
+            ds["database"], ds["schema"] = found[idx][0], found[idx][1]
+            updated = True
         else:
-            print(f"\nDataset '{name}': schema cu '{old_schema}' KHONG co trong {dbname}.")
-            ds["schema"] = pick_from_list(f"Chon schema cho dataset '{name}'", schemas)
-    with open(col_file, "w", encoding="utf-8") as f:
-        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
-    print("OK  Da ghi column.yaml (database + schema cua may nay)")
+            print(f"\nLOI dataset '{name}': KHONG database/schema nao co bang khop pattern '{ds.get('tables')}'")
+    if any(not hits[n] for n in datasets):
+        print("\nBang thuc te tren may nay (de doi chieu, sua dong 'tables:' trong column.yaml neu ten khac kieu):")
+        for db, rows in all_tables.items():
+            for schema, table in rows[:15]:
+                print(f"  {db} > {schema} > {table}")
+            if len(rows) > 15:
+                print(f"  ... ({len(rows) - 15} bang nua trong {db})")
+
+    if updated:
+        with open(col_file, "w", encoding="utf-8") as f:
+            yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+        print("OK  Da ghi column.yaml (database + schema cua may nay)")
 
 
 def ensure_workspace(root):
