@@ -58,11 +58,14 @@ mat_khau_db_cua_ban_o_day
 
 ### Bước 5 — Nháy đúp `setup.bat` ✨ (setup tự động, không gõ gì cả)
 
-Mở folder repo, **nháy đúp chuột vào file `setup.bat`**. Wizard tự làm 3 việc:
+Mở folder repo, **nháy đúp chuột vào file `setup.bat`**. Wizard tự làm 4 việc:
 
 1. 📁 Tự dò các folder OneDrive / SharePoint đã sync trên máy → bạn chỉ gõ **số** để chọn
 2. ⚙️ Tự tạo 3 folder workspace + tự ghi đường dẫn vào `settings.yaml`
-3. 🕐 Tự cài 2 lịch chạy nền vào Task Scheduler (runner mỗi 2 phút, cleanup mỗi giờ)
+3. 🗄️ Tự kết nối PostgreSQL, dò tên **database + schema** trên máy → tự ghi vào `column.yaml` (không còn lỗi `database "..." does not exist` do tên DB mỗi máy mỗi khác)
+4. 🕐 Tự cài 2 lịch chạy nền vào Task Scheduler (runner mỗi 2 phút, cleanup mỗi giờ)
+
+⚠️ Nhớ làm xong Bước 3 (`.password`) và Bước 4 (`connection.yaml`) **trước** khi chạy setup.bat — wizard cần chúng để kết nối database. Nếu lỡ chạy trước, cứ chạy lại `setup.bat` lần nữa, các bước đã xong giữ nguyên.
 
 Màn hình sẽ hiện kiểu này:
 
@@ -442,6 +445,7 @@ python -m pytest -q
 | Log CSV không update | Đóng file `log/requests.csv` trong Excel, runner sẽ retry request kế tiếp |
 | Runner không chạy background | Mở Task Scheduler kiểm tra (xem mục "🕐 Runner chạy nền ở đâu?") — status phải là `Ready` hoặc `Running`. Nếu task biến mất → chạy lại `setup.bat` |
 | Password sai | Kiểm tra file `.password` — chỉ 1 dòng, không có space đầu/cuối |
+| Lỗi `database "..." does not exist` | Tên database trong `column.yaml` không khớp máy này — chạy lại `setup.bat`, wizard tự dò tên DB thật và ghi lại |
 
 ---
 

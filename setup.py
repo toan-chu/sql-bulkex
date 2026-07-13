@@ -5,7 +5,8 @@ Tu dong:
 2. Detect moi folder OneDrive / SharePoint da sync tren may (doc registry).
 3. Tao 3 folder workspace (01_Pending / 02_Approved / 03_Output).
 4. Ghi settings.yaml voi path tuyet doi cua may nay.
-5. Cai 2 Task Scheduler (runner --once moi 2 phut, --cleanup moi gio).
+5. Scan database + schema PostgreSQL tren may -> ghi column.yaml.
+6. Cai 2 Task Scheduler (runner --once moi 2 phut, --cleanup moi gio).
 
 Chay: double-click setup.bat  (hoac: python setup.py)
 """
@@ -90,6 +91,86 @@ def pick_root(roots):
             print("Nhap so trong danh sach.")
 
 
+def pick_from_list(title, items):
+    print(f"\n{title}:")
+    for idx, item in enumerate(items, 1):
+        print(f"  [{idx}] {item}")
+    while True:
+        raw = input(f"Chon [1-{len(items)}]: ").strip()
+        if raw.isdigit() and 1 <= int(raw) <= len(items):
+            return items[int(raw) - 1]
+        print("Nhap so trong danh sach.")
+
+
+def detect_database():
+    """Ket noi PostgreSQL, liet ke database + schema, ghi vao column.yaml."""
+    try:
+        import portal
+    except ImportError as e:
+        print(f"Bo qua buoc database (thieu thu vien: {e})")
+        return
+
+    try:
+        cfg = portal.ensure_password(portal.load_config())
+    except SystemExit:
+        print("Bo qua buoc database: chua co connection.yaml (README Buoc 4).")
+        return
+
+    conn = None
+    for maintenance_db in ("postgres", "template1"):
+        try:
+            conn = portal.connect(cfg, maintenance_db)
+            break
+        except Exception:
+            continue
+    if conn is None:
+        print("LOI: khong ket noi duoc PostgreSQL.")
+        print("     Kiem tra: service PostgreSQL da chay chua? connection.yaml dung host/port/user chua? .password dung chua?")
+        print("     Sua xong chay lai setup.bat — cac buoc da xong se giu nguyen.")
+        return
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT datname FROM pg_database WHERE datistemplate = false AND datname <> 'postgres' ORDER BY datname")
+        dbs = [r[0] for r in cur.fetchall()]
+    conn.close()
+    if not dbs:
+        print("LOI: PostgreSQL chua co database nao (chua restore data?). Bo qua buoc nay.")
+        return
+
+    if len(dbs) == 1:
+        dbname = dbs[0]
+        print(f"\nOK  Database duy nhat tren may: {dbname}")
+    else:
+        dbname = pick_from_list("Database tim thay tren may", dbs)
+
+    conn = portal.connect(cfg, dbname)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT schema_name FROM information_schema.schemata "
+            "WHERE schema_name NOT IN ('pg_catalog','information_schema','pg_toast') ORDER BY 1"
+        )
+        schemas = [r[0] for r in cur.fetchall()]
+    conn.close()
+
+    col_file = BASE_DIR / "column.yaml"
+    if not col_file.exists():
+        print("Khong thay column.yaml — bo qua.")
+        return
+    with open(col_file, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    for name, ds in (data.get("datasets") or {}).items():
+        ds["database"] = dbname
+        old_schema = ds.get("schema", "")
+        if old_schema in schemas:
+            print(f"OK  dataset '{name}': schema '{old_schema}' co san trong {dbname}")
+        else:
+            print(f"\nDataset '{name}': schema cu '{old_schema}' KHONG co trong {dbname}.")
+            ds["schema"] = pick_from_list(f"Chon schema cho dataset '{name}'", schemas)
+    with open(col_file, "w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+    print("OK  Da ghi column.yaml (database + schema cua may nay)")
+
+
 def ensure_workspace(root):
     ws = Path(root) / WORKSPACE_NAME
     paths = {}
@@ -166,6 +247,9 @@ def main():
 
     folders = ensure_workspace(root)
     write_settings(folders)
+
+    print("\n=== Database PostgreSQL ===")
+    detect_database()
 
     ans = input("\nCai Task Scheduler cho runner tu chay nen? [Y/n]: ").strip().lower()
     if ans in ("", "y", "yes"):
