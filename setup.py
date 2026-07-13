@@ -112,6 +112,27 @@ def pattern_to_regex(pattern):
     return f"^{esc}$"
 
 
+def infer_pattern(tables):
+    """Tu ten bang that, suy ra pattern {year}/{month} pho bien nhat.
+
+    Vd ['x_y2025_01', 'x_y2025_02', ...] -> ('x_y{year}_{month}', 24 bang khop).
+    Tra ve (pattern, count) hoac (None, 0) neu khong bang nao co nam trong ten.
+    """
+    import re
+    from collections import Counter
+    pats = Counter()
+    for t in tables:
+        p = re.sub(r"(19|20)\d{2}", "{year}", t, count=1)
+        if "{year}" not in p:
+            continue
+        p = re.sub(r"(\{year\}\D?)(\d{2})(?!\d)", r"\1{month}", p, count=1)
+        pats[p] += 1
+    if not pats:
+        return None, 0
+    pattern, count = pats.most_common(1)[0]
+    return pattern, count
+
+
 def detect_database():
     """Quet MOI database x MOI schema, tim noi co bang khop pattern -> tu ghi column.yaml."""
     try:
@@ -201,14 +222,38 @@ def detect_database():
             ds["database"], ds["schema"] = found[idx][0], found[idx][1]
             updated = True
         else:
-            print(f"\nLOI dataset '{name}': KHONG database/schema nao co bang khop pattern '{ds.get('tables')}'")
-    if any(not hits[n] for n in datasets):
-        print("\nBang thuc te tren may nay (de doi chieu, sua dong 'tables:' trong column.yaml neu ten khac kieu):")
-        for db, rows in all_tables.items():
-            for schema, table in rows[:15]:
-                print(f"  {db} > {schema} > {table}")
-            if len(rows) > 15:
-                print(f"  ... ({len(rows) - 15} bang nua trong {db})")
+            # Pattern trong column.yaml khong khop -> tu suy pattern tu ten bang that
+            print(f"\nDataset '{name}': pattern cu '{ds.get('tables')}' khong khop bang nao.")
+            suggestions = []   # [(db, schema, pattern, count)]
+            for db, rows in all_tables.items():
+                by_schema = {}
+                for schema, table in rows:
+                    by_schema.setdefault(schema, []).append(table)
+                for schema, tables in by_schema.items():
+                    pattern, count = infer_pattern(tables)
+                    if pattern and count >= 2:
+                        suggestions.append((db, schema, pattern, count))
+            if not suggestions:
+                print("Khong suy duoc pattern (ten bang khong chua nam). Bang thuc te:")
+                for db, rows in all_tables.items():
+                    for schema, table in rows[:15]:
+                        print(f"  {db} > {schema} > {table}")
+                    if len(rows) > 15:
+                        print(f"  ... ({len(rows) - 15} bang nua trong {db})")
+                continue
+            labels = [f"{db} > {schema} > {p} ({n} bang)" for db, schema, p, n in suggestions]
+            if len(suggestions) == 1:
+                db, schema, pattern, n = suggestions[0]
+                print(f"Tim thay 1 ung vien: {labels[0]}")
+                ans = input(f"Dung cho dataset '{name}'? [Y/n]: ").strip().lower()
+                if ans not in ("", "y", "yes"):
+                    continue
+            else:
+                choice = pick_from_list(f"Chon noi chua data cho dataset '{name}'", labels)
+                db, schema, pattern, n = suggestions[labels.index(choice)]
+            ds["database"], ds["schema"], ds["tables"] = db, schema, pattern
+            updated = True
+            print(f"OK  dataset '{name}': {db} > {schema}, tables = {pattern}")
 
     if updated:
         with open(col_file, "w", encoding="utf-8") as f:

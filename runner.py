@@ -6,6 +6,7 @@ import copy
 import csv
 import datetime as dt
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -747,6 +748,25 @@ def find_sample_table(cur, schema, pattern, today=None):
     for table in candidate_tables_from_pattern(pattern, today=today):
         if table_exists(cur, schema, table):
             return table
+    # Fallback: không candidate nào khớp -> LIKE theo phần tĩnh trước placeholder
+    # (vd 'x_y{year}_{month}' -> 'x\_y%'), lấy bảng mới nhất làm mẫu.
+    # Scan chỉ cần 1 bảng đại diện; tên bảng lúc query thật vẫn dựng từ pattern.
+    prefix = re.split(r"\{year\}|\{month\}|\*", pattern)[0]
+    if prefix:
+        like = prefix.replace("_", r"\_") + "%"
+        cur.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = %s
+              AND table_name LIKE %s
+            ORDER BY table_name DESC
+            LIMIT 1
+            """,
+            (schema, like),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
     return None
 
 
