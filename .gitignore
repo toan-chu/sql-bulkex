@@ -1,5 +1,8 @@
 jobs.yaml
 .password
+settings.yaml
+connection.yaml
+column.yaml
 log/*
 !log/.gitkeep
 __pycache__/

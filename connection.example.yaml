@@ -1,5 +1,5 @@
-# SQL BulkEx connection config.
-# Edit this file on the machine that can access PostgreSQL.
+# SQL BulkEx connection config template.
+# Copy this file to connection.yaml on each machine, then edit local values.
 host: localhost
 port: 5432
 user: postgres

@@ -91,9 +91,9 @@ Layout v6:
 | Bằng | Cần đúng 1 giá trị | `CN` |
 | Trong danh sách | Chấp nhận nhiều giá trị | `CN, KR, JP` |
 | Trong khoảng | Từ mốc A đến mốc B | `1000, 5000` |
-| Bắt đầu bằng | Mã bắt đầu bằng chuỗi nào đó | `8471` |
-| Chứa | Mô tả có chứa từ khóa | `laptop` |
-| Kết thúc bằng | Mã kết thúc bằng chuỗi nào đó | `0010` |
+| Bắt đầu bằng | Mã bắt đầu bằng chuỗi nào đó, không phân biệt hoa thường | `8471` |
+| Chứa | Mô tả có chứa từ khóa, không phân biệt hoa thường | `laptop` |
+| Kết thúc bằng | Mã kết thúc bằng chuỗi nào đó, không phân biệt hoa thường | `0010` |
 
 Bạn không cần gõ code `eq`, `prefix`, `contains`. Chỉ điền giá trị vào cột toán tử tiếng Việt tương ứng.
 

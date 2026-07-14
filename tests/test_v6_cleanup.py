@@ -76,6 +76,21 @@ def test_t60_old_output_file_calls_attrib(monkeypatch, tmp_path):
     assert calls == [["attrib", "+U", "-P", str(path)]]
 
 
+def test_output_cleanup_candidates_include_old_csv(tmp_path):
+    now = time.time()
+    settings = cleanup_settings(tmp_path, output_delay_days=7)
+    output = Path(settings["folders"]["output"])
+    old_xlsx = write_file(output / "output_old.xlsx")
+    old_csv = write_file(output / "output_large.csv")
+    ignored_txt = write_file(output / "notes.txt")
+    for path in (old_xlsx, old_csv, ignored_txt):
+        os.utime(path, (now - 8 * 24 * 3600, now - 8 * 24 * 3600))
+
+    candidates = list(runner.output_cleanup_candidates(settings, now=now))
+
+    assert candidates == [(old_csv, True), (old_xlsx, True)]
+
+
 def test_t61_attrib_fail_logs_and_does_not_raise(monkeypatch, tmp_path):
     settings = cleanup_settings(tmp_path, approved_delay_hours=2)
     approved = Path(settings["folders"]["approved"])

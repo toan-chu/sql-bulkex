@@ -54,7 +54,13 @@ mat_khau_db_cua_ban_o_day
 
 ### Bước 4 — Chỉnh `connection.yaml`
 
-Điền host, port, user, database name (giữ `password: ""` — runner sẽ đọc từ `.password`).
+Nếu mới pull repo về máy này, copy file mẫu trước:
+
+```powershell
+Copy-Item connection.example.yaml connection.yaml
+```
+
+Điền host, port, user, database name (giữ `password: ""` — runner sẽ đọc từ `.password`). `connection.yaml`, `settings.yaml`, và `column.yaml` là config theo từng máy nên không commit lên Git.
 
 ### Bước 5 — Nháy đúp `setup.bat` ✨ (setup tự động, không gõ gì cả)
 
@@ -100,9 +106,11 @@ python runner.py --scan-values --yes     # Quét giá trị cột cardinality th
 python runner.py --make-template         # Sinh request_template.xlsx v6
 ```
 
-### Bước 7 — Copy template lên OneDrive
+### Bước 7 — Điền danh sách Sales + copy template lên OneDrive
 
-Copy `request_template.xlsx` mới sinh vào folder `01_Pending` để Sales biết mẫu chuẩn tải về.
+Mở `request_template.xlsx`, sheet `Tham chiếu`, mục **"Danh sách người yêu cầu (Admin điền)"** (30 dòng trống ở cuối sheet) — điền tên các Sales sẽ dùng tool. Tên này thành dropdown ở ô `Người yêu cầu` sheet `Request`. Sales không có tên trong list vẫn gõ tay được (không bị chặn).
+
+Copy `request_template.xlsx` đã điền tên vào folder `01_Pending` để Sales biết mẫu chuẩn tải về.
 
 ✅ Xong. Từ giờ máy admin chỉ cần bật (không cần đăng nhập ngồi ngoài terminal). Runner tự chạy nền.
 
@@ -274,7 +282,7 @@ Dòng `ma_so_hang_hoa`:
 - **Bắt đầu bằng** = `84`
 - **Kết thúc bằng** = `10`
 
-→ SQL: `ma_so LIKE '84%' AND ma_so LIKE '%10'`
+→ SQL: `ma_so ILIKE '84%' AND ma_so ILIKE '%10'`
 → Nghĩa: mã bắt đầu bằng 84 và kết thúc bằng 10.
 
 ### Ví dụ 2 — Nhiều prefix cùng lúc
@@ -283,7 +291,7 @@ Dòng `ma_so_hang_hoa`:
 - **Bắt đầu bằng** = `8306, 8307, 8308, 8309`
 - **Digits** = `4`
 
-→ SQL: `(ma_so LIKE '8306%' OR '8307%' OR '8308%' OR '8309%')`
+→ SQL: `(ma_so ILIKE '8306%' OR '8307%' OR '8308%' OR '8309%')`
 → Nghĩa: 4 heading HS code cấp 4 số.
 
 ### Ví dụ 3 — Filter list quốc gia
@@ -307,9 +315,9 @@ Dòng `ma_nuoc`:
 
 | Bạn điền | Digits | SQL | Match gì |
 |----------|--------|-----|----------|
-| prefix=`8306` | `4` | `LIKE '8306%'` | Mọi HS bắt đầu bằng 8306 (kể cả 6 số, 8 số, 10 số) |
-| prefix=`8306, 8307, 8308, 8309` | `4` | `(LIKE '8306%' OR ... OR '8309%')` | 4 heading cấp 4 |
-| prefix=`830610` | `6` | `LIKE '830610%'` | Mọi HS bắt đầu bằng 830610 (cấp subheading) |
+| prefix=`8306` | `4` | `ILIKE '8306%'` | Mọi HS bắt đầu bằng 8306 (kể cả 6 số, 8 số, 10 số) |
+| prefix=`8306, 8307, 8308, 8309` | `4` | `(ILIKE '8306%' OR ... OR '8309%')` | 4 heading cấp 4 |
+| prefix=`830610` | `6` | `ILIKE '830610%'` | Mọi HS bắt đầu bằng 830610 (cấp subheading) |
 | prefix=`84` | `4` | ❌ **LỖI** | Value `84` chỉ có 2 ký tự, Digits yêu cầu 4 |
 
 ### Ví dụ MST 10 và 13 số
@@ -412,6 +420,9 @@ File encoding UTF-8-BOM → Excel mở tiếng Việt đúng luôn.
 ## 💻 Lệnh thường dùng
 
 ```powershell
+# Máy mới sau khi pull: tạo connection.yaml riêng cho máy
+Copy-Item connection.example.yaml connection.yaml
+
 # Quét cột từ DB → column.yaml (chạy lần đầu hoặc khi DB đổi schema)
 python runner.py --scan-columns --yes
 
@@ -501,10 +512,11 @@ Rồi thêm `neq` vào `display_order`. Regen template. Xong.
 | `runner.py` | Script chính, chạy qua CLI |
 | `portal.py` | Terminal tool tương tác (giữ từ v5, không đổi) |
 | `operators.py` + `operators.yaml` | Registry 6 operator, thêm op mới không cần sửa Python |
-| `connection.yaml` | Config kết nối PostgreSQL (không chứa password) |
+| `connection.example.yaml` | File mẫu để copy thành `connection.yaml` trên từng máy |
+| `connection.yaml` | Config kết nối PostgreSQL theo máy, gitignored |
 | `.password` | Password DB (gitignored) |
-| `column.yaml` | Schema dataset, cột, cardinality cache, value cache |
-| `settings.yaml` | Folder paths, cleanup config, log config |
+| `column.yaml` | Schema dataset, cột, cardinality cache, value cache theo máy, gitignored |
+| `settings.yaml` | Folder paths, cleanup config, log config theo máy, gitignored |
 | `request_template.xlsx` | Template Excel v6 (5 sheet) |
 | `docs/SPEC.md` | Spec đầy đủ v6 (dài, cho technical review) |
 | `docs/SPEC_v5_archived.md` | Spec v5 archive để reference |

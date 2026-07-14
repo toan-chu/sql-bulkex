@@ -31,8 +31,8 @@ operators:
     display: "Bắt đầu bằng"
     hint: "1 hoặc nhiều prefix, cách phẩy"
     example: "84, 85"
-    sql_single: "{col} LIKE {val_prefix}"
-    sql_multi: "({col} LIKE ANY({vals_prefix}))"
+    sql_single: "{col} ILIKE {val_prefix}"
+    sql_multi: "({col} ILIKE ANY({vals_prefix}))"
     multi_value: true
     arity:
     supports_digits: true
@@ -41,8 +41,8 @@ operators:
     display: "Chứa"
     hint: "1 hoặc nhiều chuỗi, cách phẩy"
     example: "laptop, gaming"
-    sql_single: "{col} LIKE {val_contains}"
-    sql_multi: "({col} LIKE ANY({vals_contains}))"
+    sql_single: "{col} ILIKE {val_contains}"
+    sql_multi: "({col} ILIKE ANY({vals_contains}))"
     multi_value: true
     arity:
     supports_digits: false
@@ -51,8 +51,8 @@ operators:
     display: "Kết thúc bằng"
     hint: "1 hoặc nhiều suffix, cách phẩy"
     example: "AA, BB"
-    sql_single: "{col} LIKE {val_suffix}"
-    sql_multi: "({col} LIKE ANY({vals_suffix}))"
+    sql_single: "{col} ILIKE {val_suffix}"
+    sql_multi: "({col} ILIKE ANY({vals_suffix}))"
     multi_value: true
     arity:
     supports_digits: true

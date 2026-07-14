@@ -71,6 +71,7 @@ def test_t42_make_template_has_five_v6_sheets_with_hidden_values(tmp_path):
     assert wb.sheetnames == ["Request", "Cột Export", "Cột Import", "Values", "Tham chiếu"]
     assert wb["Values"].sheet_state == "hidden"
     assert wb["Request"]["A8"].value == "Người duyệt (Admin điền sau approve)"
+    assert wb["Request"].print_area == "'Request'!$A$1:$C$8"
 
 
 def test_t43_column_export_has_digits_header(tmp_path):
@@ -155,3 +156,31 @@ def test_t47c_row_anchor_conditional_formatting_counts_operator_cells(tmp_path):
         and rule.dxf.fill.fgColor.rgb == "00FFF2CC"
         for rule in rules
     )
+
+
+def test_requester_dropdown_uses_reference_named_range(tmp_path):
+    wb = build_template(tmp_path)
+    request = wb["Request"]
+    reference = wb["Tham chiếu"]
+    dv = validation_for_cell(request, "B1", "list")
+    header_row = next(
+        row
+        for row in range(1, reference.max_row + 1)
+        if reference.cell(row=row, column=1).value == "Danh sách người yêu cầu (Admin điền)"
+    )
+
+    assert defined_name_text(wb, "nguoi_yeu_cau_list") == f"'Tham chiếu'!$A${header_row + 1}:$A${header_row + 30}"
+    assert dv is not None
+    assert dv.formula1 == "=nguoi_yeu_cau_list"
+    assert dv.allow_blank
+    assert dv.errorStyle == "information"
+
+
+def test_request_sheet_has_guidance_column(tmp_path):
+    wb = build_template(tmp_path)
+    ws = wb["Request"]
+    hints = [ws.cell(row=row, column=3).value for row in range(1, 9)]
+
+    assert all(hints)
+    assert "both" in ws["C2"].value
+    assert ws.column_dimensions["C"].width == 45

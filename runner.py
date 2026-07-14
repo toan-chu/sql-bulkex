@@ -63,6 +63,16 @@ REQUEST_V5_LABELS_ORDER = [
     "Ghi chú / tên request",
 ]
 REQUEST_V6_LABELS_ORDER = REQUEST_V5_LABELS_ORDER + ["Người duyệt (Admin điền sau approve)"]
+REQUEST_V6_HINTS = {
+    "Người yêu cầu": "Chọn tên từ dropdown. Không có tên -> gõ tay.",
+    "Bảng": "export / import / both. both = kết quả 2 sheet.",
+    "Năm": "VD: 2026 hoặc 2025,2026 hoặc 2025-2026",
+    "Tháng": "VD: 06 hoặc 01-03 hoặc 01,03,12",
+    "Tách file theo": "Để trống nếu không biết.",
+    "Xác nhận lớn": "Chỉ điền YES khi admin yêu cầu.",
+    "Ghi chú / tên request": "Tên ngắn không dấu, VD: hs8471_cn",
+    "Người duyệt (Admin điền sau approve)": "Sales bỏ trống dòng này.",
+}
 COLUMN_SCAN_SKELETON = {
     "datasets": {
         "export": {
@@ -1683,7 +1693,7 @@ def output_cleanup_candidates(settings, now=None):
     freeup_cfg = settings.get("onedrive_freeup") or {}
     delay_days = float(freeup_cfg.get("output_delay_days", DEFAULT_SETTINGS["onedrive_freeup"]["output_delay_days"]))
     cutoff = (now or time.time()) - (delay_days * 24 * 3600)
-    for path in sorted(root.glob("*.xlsx")):
+    for path in sorted(p for p in root.iterdir() if p.is_file() and p.suffix.lower() in (".xlsx", ".csv")):
         yield path, path.stat().st_mtime <= cutoff
 
 
@@ -1935,6 +1945,7 @@ def setup_request_sheet(ws, column_cfg):
     ws.title = "Request"
     ws.column_dimensions["A"].width = 30
     ws.column_dimensions["B"].width = 40
+    ws.column_dimensions["C"].width = 45
     ws.freeze_panes = "B1"
     style_table_header(ws, 1, 1)
     value_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
@@ -1955,6 +1966,12 @@ def setup_request_sheet(ws, column_cfg):
         value.border = border
         value.number_format = "@"
         value.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        hint = ws.cell(row=row, column=3, value=REQUEST_V6_HINTS.get(label, ""))
+        hint.fill = value_fill
+        hint.font = Font(name="Calibri", size=11, color="808080", italic=True)
+        hint.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        hint.border = border
+    add_named_range_validation(ws, "B1", "nguoi_yeu_cau_list", "information")
     datasets = list((column_cfg.get("datasets") or {}).keys())
     if datasets:
         dataset_options = list(datasets)
@@ -1965,7 +1982,7 @@ def setup_request_sheet(ws, column_cfg):
     if split_columns:
         add_list_validation(ws, "B5", split_columns, allow_blank=True)
     add_list_validation(ws, "B6", ["YES"], allow_blank=True)
-    ws.print_area = "A1:B8"
+    ws.print_area = "A1:C8"
 
 
 def add_digits_validation(ws, cells):
@@ -2044,9 +2061,9 @@ def setup_reference_sheet(ws, op_builder):
         "eq": ["Bằng", "Trùng đúng", "1 giá trị hoặc nhiều cách phẩy (tự IN)", "CN, KR", "Không"],
         "in": ["Trong danh sách", "Thuộc list", "Nhiều cách phẩy", "CN, KR, JP", "Không"],
         "between": ["Trong khoảng", "Giữa 2 mốc", "Đúng 2 giá trị cách phẩy", "1000, 5000", "Không"],
-        "prefix": ["Bắt đầu bằng", "Prefix", "1 hoặc nhiều cách phẩy", "8306, 8307", "Có"],
-        "contains": ["Chứa", "Substring", "1 hoặc nhiều cách phẩy", "laptop, gaming", "Không"],
-        "suffix": ["Kết thúc bằng", "Suffix", "1 hoặc nhiều cách phẩy", "AA, BB", "Có"],
+        "prefix": ["Bắt đầu bằng", "Prefix (không phân biệt hoa thường)", "1 hoặc nhiều cách phẩy", "8306, 8307", "Có"],
+        "contains": ["Chứa", "Substring (không phân biệt hoa thường)", "1 hoặc nhiều cách phẩy", "laptop, gaming", "Không"],
+        "suffix": ["Kết thúc bằng", "Suffix (không phân biệt hoa thường)", "1 hoặc nhiều cách phẩy", "AA, BB", "Có"],
     }
     for key, display in op_builder.display_labels():
         row = list(operator_details.get(key) or [display, display, "", "", ""])
@@ -2081,7 +2098,7 @@ def setup_reference_sheet(ws, op_builder):
         ["Ví dụ prefix", "Row ma_so_hang_hoa: Bắt đầu bằng = 84, 85"],
         ["Ví dụ suffix", "Row ma_so_hang_hoa: Kết thúc bằng = 00"],
         ["Ví dụ digits", "Digits = 10 nếu muốn tier national code."],
-        ["SQL logic", "(ma_so LIKE '84%' OR '85%') AND ma_so LIKE '%00'"],
+        ["SQL logic", "(ma_so ILIKE '84%' OR '85%') AND ma_so ILIKE '%00'"],
         ["Cell op trống", "Op không active."],
         [],
         ["Cột", "Mục đích"],
@@ -2104,6 +2121,28 @@ def setup_reference_sheet(ws, op_builder):
     ]
     for row in sections:
         ws.append(row)
+    ws.append([])
+    requester_header_row = ws.max_row + 1
+    requester_first_row = requester_header_row + 1
+    requester_last_row = requester_first_row + 29
+    ws.cell(row=requester_header_row, column=1, value="Danh sách người yêu cầu (Admin điền)")
+    requester_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+    requester_border = Border(
+        left=Side(style="thin", color="BFBFBF"),
+        right=Side(style="thin", color="BFBFBF"),
+        top=Side(style="thin", color="BFBFBF"),
+        bottom=Side(style="thin", color="BFBFBF"),
+    )
+    for row_index in range(requester_first_row, requester_last_row + 1):
+        cell = ws.cell(row=row_index, column=1)
+        cell.fill = requester_fill
+        cell.border = requester_border
+    ws.parent.defined_names.add(
+        DefinedName(
+            name="nguoi_yeu_cau_list",
+            attr_text=f"'Tham chiếu'!$A${requester_first_row}:$A${requester_last_row}",
+        )
+    )
     ws.column_dimensions["A"].width = 28
     ws.column_dimensions["B"].width = 56
     ws.column_dimensions["C"].width = 32
@@ -2119,7 +2158,7 @@ def setup_reference_sheet(ws, op_builder):
                     top=Side(style="thin", color="BFBFBF"),
                     bottom=Side(style="thin", color="BFBFBF"),
                 )
-    header_rows = [1, 9, 18, 26, 32, 38]
+    header_rows = [1, 9, 18, 26, 32, 38, requester_header_row]
     for row in header_rows:
         style_table_header(ws, row, 5 if row == 1 else 2)
 

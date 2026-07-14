@@ -60,7 +60,7 @@ def test_t33_prefix_multi_with_digits_builds_like_any_without_length():
 
     assert isinstance(fragment, sql.Composable)
     assert params == [["8306%", "8307%"]]
-    assert builder.debug_sql("ma_so", "prefix", "8306,8307", digits=4) == "(ma_so LIKE ANY(['8306%', '8307%']))"
+    assert builder.debug_sql("ma_so", "prefix", "8306,8307", digits=4) == "(ma_so ILIKE ANY(['8306%', '8307%']))"
 
 
 def test_t34_suffix_single_with_digits_builds_suffix_like():
@@ -70,7 +70,7 @@ def test_t34_suffix_single_with_digits_builds_suffix_like():
 
     assert isinstance(fragment, sql.Composable)
     assert params == ["%AA"]
-    assert builder.debug_sql("ma_so", "suffix", "AA", digits=2) == "ma_so LIKE '%AA'"
+    assert builder.debug_sql("ma_so", "suffix", "AA", digits=2) == "ma_so ILIKE '%AA'"
 
 
 def test_t35_between_ignores_digits_when_operator_does_not_support_it():
@@ -81,6 +81,16 @@ def test_t35_between_ignores_digits_when_operator_does_not_support_it():
     assert isinstance(fragment, sql.Composable)
     assert params == ["1000", "5000"]
     assert builder.debug_sql("gia", "between", "1000,5000", digits=4) == "gia BETWEEN '1000' AND '5000'"
+
+
+def test_contains_builds_case_insensitive_ilike():
+    builder = OperatorBuilder("operators.yaml")
+
+    fragment, params = builder.build_where("ten_cong_ty", "contains", "mAsAn")
+
+    assert isinstance(fragment, sql.Composable)
+    assert params == ["%mAsAn%"]
+    assert builder.debug_sql("ten_cong_ty", "contains", "mAsAn") == "ten_cong_ty ILIKE '%mAsAn%'"
 
 
 def test_t36_between_with_three_values_raises():
