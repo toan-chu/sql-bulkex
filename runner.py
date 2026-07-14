@@ -82,7 +82,15 @@ COLUMN_SCAN_SKELETON = {
             "columns": [],
             "cardinality_cache": {},
             "value_cache": {},
-        }
+        },
+        "import": {
+            "database": "",
+            "schema": "",
+            "tables": "",
+            "columns": [],
+            "cardinality_cache": {},
+            "value_cache": {},
+        },
     },
     "operator_defaults": {},
     "cardinality": {
