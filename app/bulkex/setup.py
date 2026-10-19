@@ -18,6 +18,7 @@ from pathlib import Path
 import psycopg2
 import yaml
 
+from .onedrive import keep_on_device
 from .catalog import load_defs, scan_values
 from .config import APP_DIR, CONFIG_DIR, ROOT_DIR, Settings, connect, load_yaml
 from .runner import Runner, setup_logging
@@ -202,6 +203,8 @@ def make_workspace(ws: Path, app_dir: Path):
         (ws / sub).mkdir(parents=True, exist_ok=True)
     shutil.copy2(app_dir / "web" / "BulkEx.html", ws / "BulkEx.html")  # always the newest page
     say(f"   OK  {ws}  (BulkEx.html, input, output, _system)")
+    if keep_on_device(ws):  # the runner must be able to read every request: no cloud-only files on this computer
+        say("   OK  OneDrive: thư mục được đặt 'Always keep on this device'")
 
 
 def save_settings(config_dir: Path, ws: Path):

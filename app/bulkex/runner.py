@@ -25,6 +25,7 @@ from openpyxl.styles import Font, PatternFill
 from . import query as Q
 from .catalog import build_catalog, load_defs, write_js
 from .config import connect, load_yaml
+from .onedrive import keep_on_device, online_only
 from .scan import field_types, scan
 
 log = logging.getLogger("bulkex")
@@ -179,10 +180,15 @@ class Runner:
         self.types = {ds: field_types(t, nat) for ds, t in self.found.items() if t}
         write_js(self.s.system_dir / "catalog.js", "BULKEX_CATALOG", self.catalog, "Written by the BulkEx runner. Do not edit.")
         snap = {ds: [{k: t[k] for k in ("db", "schema", "table", "period")} for t in ts] for ds, ts in self.found.items()}
+        try:
+            old = json.loads((self.s.system_dir / "tables.json").read_text(encoding="utf-8")).get("warnings")
+        except (OSError, ValueError, AttributeError):
+            old = None
         (self.s.system_dir / "tables.json").write_text(json.dumps({"tables": snap, "warnings": warnings}, ensure_ascii=False, indent=1),
                                                         encoding="utf-8")
-        for w in warnings:
-            log.warning(w)
+        if warnings != old:  # the same notes every 2 minutes would only bury real errors
+            for w in warnings:
+                log.warning(w)
         return warnings
 
     def label(self, ds, col):
@@ -428,10 +434,22 @@ class Runner:
             log.error("No data tables reachable, requests stay in input/: %s", e)
             return 0
         done = 0
-        for f in self.pending(settle_seconds):
+        files = self.pending(settle_seconds)
+        if any(online_only(f) for f in files):
+            keep_on_device(self.s.workspace)  # ask OneDrive to download them; they are read on a later pass
+        for f in files:
             try:
+                if online_only(f):
+                    raise OSError("online-only in OneDrive")
                 req = json.loads(f.read_text(encoding="utf-8-sig"))
-            except (ValueError, OSError) as e:
+            except OSError as e:  # not downloaded by OneDrive yet: wait, it is not a broken request
+                if not any(r.get("id") == f.stem for r in status.active):
+                    log.warning("Waiting for OneDrive to download %s (%s). If this stays, right-click the BulkEx folder "
+                                "and choose 'Always keep on this device'.", f.name, e)
+                status.put({"id": f.stem, "name": f.stem, "state": "waiting", "_file": f.name,
+                            "message": "Waiting for OneDrive to bring this request to the database computer."})
+                continue
+            except ValueError as e:
                 self._finish(f, status, {"id": f.stem, "name": f.stem, "state": "failed",
                                          "message": "This file is not a BulkEx request (it can't be read)."}, "failed")
                 log.warning("Unreadable request %s: %s", f.name, e)
@@ -478,8 +496,8 @@ class Runner:
         if dest.exists():
             dest = dest.with_name(f"{f.stem}_{int(time.time())}{f.suffix}")
         try:
-            text = f.read_text(encoding="utf-8-sig", errors="replace")
             try:
+                text = f.read_text(encoding="utf-8-sig", errors="replace")
                 body = json.loads(text)
                 if not isinstance(body, dict):
                     raise ValueError

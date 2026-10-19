@@ -127,6 +127,11 @@ Vòng 10 (Chairman 13:48, chốt): >3 triệu dòng ra TOÀN BỘ CSV (Detail + 
 Bỏ Clear list / ×: Recent requests dựng lại mỗi lượt từ _system/done + _system/failed (kết quả ghi luôn vào file yêu cầu, khoá _result);
 admin xoá file ở đó là mọi người hết thấy. Trang chia 2 tab Done / Failed, việc đang chạy luôn hiện trên cùng. Chairman tự xoá tay
 -> bỏ câu hỏi dọn 30 ngày. 34/34 đạt; 3 phép đột biến (bỏ CSV, không xoá file input, bỏ BOM) đều làm đỏ phép thử.
+Vòng 11 (máy HAN 14:46-14:50, log Chairman gửi): runner chạy đều nhưng 2 file yêu cầu ở dạng đám mây OneDrive -> đọc báo
+[Errno 22] Invalid argument; code cũ coi là file hỏng, ghi lỗi lặp mỗi lượt. Sửa: file chưa tải về -> trạng thái 'waiting', giữ trong input,
+runner gọi attrib +P (Always keep on this device) cho thư mục chung; setup cũng đặt +P lúc cài; ghi chú quét chỉ ghi log khi thay đổi.
+37/37 đạt; 2 phép đột biến đỏ. Ghi nhận nghiệp vụ: 2025-01..09 có cả vietnam_export và vn_export (runner lấy vietnam_*) - chờ Chairman xác nhận.
+`[RUNTIME CHƯA KIỂM]`: attrib +P trên OneDrive/SharePoint thật ở HAN.
 `[RUNTIME CHƯA KIỂM]`: CAI-DAT.bat, Task Scheduler, os.startfile, ghi thẳng thư mục từ trang - chỉ Windows phán được.
 
 ## HISTORY

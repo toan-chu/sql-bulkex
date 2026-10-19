@@ -385,3 +385,41 @@ def test_database_down_keeps_field_list_and_requests(runner):
     assert runner.run_once(settle_seconds=0) == 0
     assert (runner.s.system_dir / "catalog.js").read_text(encoding="utf-8") == before
     assert (runner.s.input_dir / "r.json").exists()          # retried on the next pass, not failed
+
+
+def test_online_only_request_waits_instead_of_failing(runner, monkeypatch):
+    import bulkex.runner as R
+    calls = []
+    monkeypatch.setattr(R, "online_only", lambda f: True)              # OneDrive has not downloaded it yet
+    monkeypatch.setattr(R, "keep_on_device", lambda folder: calls.append(folder) or True)
+    req = request([part("export", ["2025-01"])], rid="cloud1")
+    runner.s.ensure_dirs()
+    (runner.s.input_dir / "cloud1.json").write_text(json.dumps(req), encoding="utf-8")
+    runner.run_once(settle_seconds=0)
+    runner.run_once(settle_seconds=0)
+    assert (runner.s.input_dir / "cloud1.json").exists()               # kept, retried later
+    assert not list((runner.s.system_dir / "failed").iterdir())
+    assert calls == [runner.s.workspace, runner.s.workspace]           # asked OneDrive to keep the folder on the computer
+    js = (runner.s.system_dir / "status.js").read_text(encoding="utf-8")
+    shown = json.loads(js[js.index("{"):js.rindex("}") + 1])["requests"]
+    assert [(r["id"], r["state"]) for r in shown] == [("cloud1", "waiting")]
+    monkeypatch.setattr(R, "online_only", lambda f: False)             # downloaded now
+    runner.run_once(settle_seconds=0)
+    assert (runner.s.system_dir / "done" / "cloud1.json").exists()
+
+
+def test_same_scan_notes_are_logged_once(runner, caplog):
+    runner.s.ensure_dirs()
+    with caplog.at_level("WARNING", logger="bulkex"):
+        runner.refresh_catalog()
+        first = len(caplog.records)
+        runner.refresh_catalog()
+    assert first > 0 and len(caplog.records) == first
+
+
+def test_keep_on_device_marks_the_folder_pinned(tmp_path):
+    from bulkex.onedrive import keep_on_device
+    seen = []
+    ok = keep_on_device(tmp_path, run=lambda a, **k: seen.append(a) or type("R", (), {"returncode": 0})(), windows=True)
+    assert ok and seen == [["attrib", "+P", "-U", str(tmp_path)], ["attrib", "+P", "-U", str(tmp_path / "*"), "/S", "/D"]]
+    assert keep_on_device(tmp_path, run=lambda *a, **k: 1 / 0, windows=False) is False
