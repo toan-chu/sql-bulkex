@@ -1,0 +1,7 @@
+# BulkEx database connection - setup (CAI-DAT.bat) writes config/connection.yaml from this.
+# Keep password empty here: setup stores it in config/.password (never committed).
+host: localhost
+port: 5432
+user: postgres
+password: ""
+maintenance_db: postgres   # any database the user can open; used to list the other databases

@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BulkEx</title>
+<!-- BulkEx v7 request builder. Reads _system/catalog.js and _system/status.js written by the runner;
+     writes request files (bulkex-request/1 JSON) into input/. No SQL is produced here. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --purple:#4d148c; --purple-deep:#2b0a52; --purple-soft:#efe8f8; --purple-line:#d9cbee;
+  --orange:#ff6200; --orange-soft:#fff0e6;
+  --paper:#ffffff; --mist:#f7f4fb; --ink:#241536; --muted:#6c6280;
+  --ok:#17804f; --bad:#c2301a;
+  --r-s:8px; --r-m:14px;
+  --head:"Montserrat",system-ui,sans-serif; --body:"Quicksand",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--mist);color:var(--ink);font-family:var(--body);font-weight:500;font-size:15px;line-height:1.5}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+.bar{background:var(--purple);color:#fff}
+.bar-in{max-width:1240px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:16px}
+.mark{font-family:var(--head);font-weight:700;font-size:22px;letter-spacing:-.01em}
+.mark b{color:var(--orange);font-weight:700}
+.bar-note{margin-left:auto;font-size:13px;opacity:.85}
+.sample{background:var(--orange-soft);color:#7a3200;font-size:13px;text-align:center;padding:6px 16px}
+
+.wrap{max-width:1240px;margin:0 auto;padding:28px 24px 64px;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:32px;align-items:start}
+@media (max-width:980px){.wrap{grid-template-columns:1fr;padding:20px 16px 48px}}
+main{display:flex;flex-direction:column;gap:24px}
+section.step{background:var(--paper);border-radius:var(--r-m);padding:22px 24px;box-shadow:0 1px 0 var(--purple-line)}
+.step-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+h2{font-family:var(--head);font-weight:700;font-size:18px;margin:0;color:var(--purple-deep)}
+.step-head .count{font-size:13.5px;color:var(--muted);font-weight:600}
+.hint{color:var(--muted);font-size:13.5px;margin:4px 0 16px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.lab{font-weight:600;font-size:13.5px;color:var(--muted)}
+
+select,input[type=text],input[type=number]{background:#fff;border:1.5px solid var(--purple-line);border-radius:var(--r-s);padding:8px 10px;min-height:40px}
+select:hover,input:hover{border-color:#bfa8e0}
+/* one chevron for every dropdown, same inset everywhere */
+select{appearance:none;-webkit-appearance:none;background-color:#fff;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%234d148c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;background-size:12px 8px;padding-right:36px;line-height:1.2;cursor:pointer}
+select:disabled{opacity:.55;cursor:not-allowed}
+select::-ms-expand{display:none}
+.seg{display:inline-flex;background:var(--purple-soft);border-radius:999px;padding:4px}
+.seg button{border:0;background:transparent;padding:7px 18px;border-radius:999px;font-weight:700;color:var(--purple);cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--purple);color:#fff}
+.seg{position:relative}
+.seg button{position:relative;z-index:1;transition:color .25s ease}
+.seg button[aria-pressed=true]{background:transparent;color:#fff}
+.seg-ind{position:absolute;top:4px;bottom:4px;left:0;width:0;border-radius:999px;background:var(--purple);z-index:0;
+  box-shadow:0 2px 8px rgba(77,20,140,.25);transition:transform .34s cubic-bezier(.3,.8,.2,1),width .34s cubic-bezier(.3,.8,.2,1)}
+.tabs-row{display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;margin:8px 0 2px}
+.chip.locked{background:var(--orange-soft);border-color:#ffc9a6}
+.chip.locked small{color:#b84700}
+.btn{border:0;border-radius:999px;padding:10px 18px;font-weight:700;cursor:pointer}
+.btn-primary{background:var(--orange);color:#fff}
+.btn-primary:hover{background:#e85800}
+.btn-ghost{background:transparent;color:var(--purple);border:1.5px solid var(--purple-line)}
+.btn-ghost:hover{background:var(--purple-soft)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.link{border:0;background:none;color:var(--purple);font-weight:700;cursor:pointer;padding:6px 4px}
+.link:hover{text-decoration:underline}
+.x{border:0;background:none;width:32px;height:32px;border-radius:50%;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;flex:none}
+.x:hover{background:var(--purple-soft);color:var(--bad)}
+
+/* month grid */
+.months{display:grid;grid-template-columns:64px repeat(12,minmax(0,1fr));gap:6px;margin-top:12px}
+.months .yr,.mo{box-sizing:border-box;height:36px;margin:0;padding:0;border:1.5px solid transparent;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700;line-height:1;transition:background-color .12s,border-color .12s,color .12s}
+.months .yr{font-family:var(--head);font-size:14px;color:var(--purple-deep);background:var(--purple-soft)}
+.months .yr:hover{border-color:var(--orange);color:var(--orange)}
+.months .yr[data-full=true]{background:var(--orange);color:#fff}
+.months .yr[data-part=true]{border-color:var(--orange);color:var(--orange);background:#fff}
+.mo{font-size:13px;color:var(--purple);background:#fff;border-color:var(--purple-line)}
+.mo:hover{border-color:var(--orange);color:var(--orange)}
+.mo[aria-pressed=true]{background:var(--orange);border-color:var(--orange);color:#fff}
+.mo:disabled{background:transparent;border:1.5px dashed #e3dcec;color:#cfc6dc;cursor:default}
+.grid-title{font-family:var(--head);font-weight:700;font-size:14px;color:var(--purple-deep);margin:18px 0 0;display:flex;gap:10px;align-items:baseline}
+.grid-title .count{font-family:var(--body);font-size:13px;color:var(--muted);font-weight:600}
+@media (max-width:520px){.months{grid-template-columns:48px repeat(12,minmax(0,1fr));gap:3px}.months .yr,.mo{height:32px}.months .yr{font-size:12px}.mo{font-size:0}.mo::after{content:attr(data-n);font-size:11px}}
+.quick{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:10px;align-items:center}
+.seg.small button{padding:5px 14px;font-size:13.5px}
+.preview{margin-top:16px;border:1.5px solid var(--purple-line);border-radius:var(--r-s);overflow:hidden;font-size:13px}
+.preview .ph{background:var(--purple-soft);padding:8px 12px;color:var(--purple-deep);font-weight:600}
+.preview table{border-collapse:collapse;width:100%}
+.preview th{background:#fff;text-align:left;padding:8px 12px;border-top:1px solid var(--purple-line);font-family:var(--head);font-size:12.5px;color:var(--purple)}
+.preview th.num{text-align:right;color:var(--orange)}
+.preview td{padding:6px 12px;color:#b9aecb;border-top:1px dashed var(--purple-line)}
+.preview td.num{text-align:right}
+.admin-note{max-width:1240px;margin:-40px auto 40px;padding:0 24px;font-size:12.5px;color:var(--muted)}
+.admin-note code{background:var(--purple-soft);padding:1px 5px;border-radius:4px}
+.quick .lab{margin-right:4px}
+
+/* filters */
+.group{border-left:3px solid var(--purple-line);padding:4px 0 4px 16px;margin:6px 0}
+.group.root{border-left:0;padding-left:0}
+.group-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-weight:600}
+.group-head select{min-height:34px;padding:4px 32px 4px 10px;background-position:right 10px center;font-weight:700;color:var(--purple)}
+.cond{display:grid;grid-template-columns:210px 180px minmax(0,1fr) 32px;gap:8px;align-items:start;padding:8px 0;border-bottom:1px dashed var(--purple-line)}
+.cond:last-of-type{border-bottom:0}
+@media (max-width:760px){.cond{grid-template-columns:1fr 32px}.cond>select,.cond>.val{grid-column:1}}
+.joiner{font-size:12.5px;font-weight:700;color:var(--purple);margin:2px 0 2px 2px}
+.adders{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.val{min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#fff;border:1.5px solid var(--purple-line);border-radius:var(--r-s);padding:5px 6px;min-height:40px;cursor:text}
+.chips:focus-within{border-color:var(--purple)}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--purple-soft);color:var(--purple-deep);border-radius:999px;padding:2px 4px 2px 10px;font-weight:600;font-size:13.5px;max-width:100%}
+.chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip small{font-size:11px;color:var(--muted);font-weight:600}
+.chip button{border:0;background:none;cursor:pointer;color:var(--muted);width:20px;height:20px;border-radius:50%;line-height:1}
+.chip button:hover{background:#fff;color:var(--bad)}
+.chips input{border:0;outline:0;flex:1;min-width:70px;min-height:28px;padding:2px 4px}
+.val-meta{font-size:12.5px;color:var(--muted);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.pair{display:flex;gap:8px;align-items:center}
+.pair input{width:100%}
+.empty-filters{color:var(--muted);padding:6px 0 10px;margin:0}
+
+/* result */
+.col-tools{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin-top:10px}
+
+.col-list{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 12px}
+.col-list .chip{background:#fff;border:1.5px solid var(--purple-line)}
+.col-list .chip:hover{border-color:var(--orange)}
+.col-add{max-width:320px;width:100%}
+.opts{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:18px;padding-top:16px;border-top:1px dashed var(--purple-line)}
+.check{display:flex;gap:8px;align-items:center;cursor:pointer}
+.check input{accent-color:var(--purple)}
+.sub{margin-top:16px}
+.parts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+@media (max-width:620px){.parts{grid-template-columns:1fr}}
+.part{display:flex;gap:12px;align-items:flex-start;border:1.5px solid var(--purple-line);border-radius:var(--r-m);padding:12px 14px;cursor:pointer;background:#fff}
+.part:hover{border-color:var(--orange)}
+.part:has(input:checked){border-color:var(--orange);background:var(--orange-soft)}
+.part input{accent-color:var(--orange);width:18px;height:18px;margin-top:2px;flex:none}
+.part b{display:block;font-family:var(--head);color:var(--purple-deep);font-size:14.5px}
+.part span{font-size:13px;color:var(--muted)}
+.block{margin-top:20px;padding-top:4px}
+.block-title{font-family:var(--head);font-weight:700;font-size:14.5px;color:var(--purple-deep);display:flex;gap:10px;align-items:baseline;margin:0}
+.block-title .count{font-family:var(--body);font-size:13px;color:var(--muted);font-weight:600}
+.block + .block{border-top:1px dashed var(--purple-line);margin-top:24px;padding-top:20px}
+.tpl-actions{display:flex;flex-wrap:wrap;gap:2px 8px;margin-top:8px}
+.tpl-note{font-size:12.5px;color:var(--muted);margin:8px 0 0}
+details.panel{padding:0}
+details.panel>summary{list-style:none;cursor:pointer;padding:16px 20px;display:flex;align-items:center;gap:10px;border-radius:var(--r-m)}
+details.panel>summary::-webkit-details-marker{display:none}
+details.panel>summary h2{margin:0}
+details.panel>summary .count{font-size:13px;color:var(--muted);font-weight:600}
+details.panel>summary::after{content:"";margin-left:auto;width:12px;height:8px;transition:transform .22s ease;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%234d148c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center/12px 8px;transition:transform .15s}
+details.panel[open]>summary::after{transform:rotate(180deg)}
+details.panel>summary:hover h2{color:var(--orange)}
+details.panel>.panel-body{padding:0 20px 18px;overflow:hidden}
+.req-desc{grid-column:2;font-size:13px;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
+.req-actions{grid-column:2;display:flex;gap:12px;margin-top:2px}
+.req-actions .link{padding:0;font-size:13px}
+.req-actions a{color:var(--purple);font-weight:700;font-size:13px}
+.req-filter{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;font-size:13px}
+.req-filter .seg button{white-space:nowrap}
+.req-actions{flex-wrap:wrap;row-gap:2px}
+.sub .lab{display:block;margin-bottom:6px}
+
+/* right panel */
+aside{position:sticky;top:20px;display:flex;flex-direction:column;gap:20px}
+@media (max-width:980px){aside{position:static}}
+.ask{background:var(--purple-deep);color:#fff;border-radius:var(--r-m);padding:22px}
+.ask h2{color:#fff;font-size:15px;opacity:.8;margin-bottom:10px}
+.sentence{font-family:var(--head);font-weight:600;font-size:19px;line-height:1.55;margin:0 0 18px}
+.sentence .f{color:#d7c3f5}
+.sentence .v{color:#fff;border-bottom:2px solid var(--orange)}
+.sentence .op{font-weight:600;opacity:.85}
+.sentence .warn{color:#ffb38a}
+.ask .lab{color:#cbb7ea;display:block;margin-bottom:6px}
+.ask input[type=text]{width:100%;background:#3a1466;border-color:#5b2f8f;color:#fff}
+.ask input::placeholder{color:#a58bc9}
+.problems{margin:12px 0 0;padding:10px 12px;background:#3a1466;border-radius:var(--r-s);font-size:13.5px;list-style:none}
+.problems li::before{content:"• ";color:#ffb38a}
+.dest{font-size:12.5px;color:#cbb7ea;margin-top:12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.dest .link{color:#fff;font-size:12.5px;padding:0}
+.dest.todo{background:#3a1466;border-radius:var(--r-s);padding:10px 12px;display:block;line-height:1.5}
+.dest-btn{display:block;margin-top:8px;color:#fff;border-color:#ff9a5c;padding:7px 14px;font-size:13px}
+.dest-btn:hover{background:var(--orange);border-color:var(--orange)}
+.ask-help{font-size:12.5px;color:#cbb7ea;margin:10px 0 0;line-height:1.5}
+.ask-help b{color:#fff;font-weight:700}
+.panel{background:var(--paper);border-radius:var(--r-m);padding:18px 20px;box-shadow:0 1px 0 var(--purple-line)}
+.panel h2{font-size:15px;margin-bottom:10px}
+.req{display:grid;grid-template-columns:10px 1fr;gap:2px 10px;padding:10px 0;border-top:1px solid var(--purple-soft)}
+.req:first-of-type{border-top:0}
+.dot{width:10px;height:10px;border-radius:50%;margin-top:7px;background:var(--muted)}
+.dot.done{background:var(--ok)}.dot.failed{background:var(--bad)}.dot.running{background:var(--orange)}.dot.sent{background:#b39ddb}
+.req-name{font-weight:700}
+.req-meta{grid-column:2;font-size:13px;color:var(--muted)}
+.req-meta a{color:var(--purple);font-weight:700}
+.req-msg{grid-column:2;font-size:13px;color:var(--bad)}
+.req-note{grid-column:2;font-size:13px;color:var(--ok)}
+.st-ok{color:var(--ok);font-weight:700}
+.req-warn{grid-column:2;font-size:13px;color:#b45309;font-weight:600}
+.st-bad{color:var(--bad);font-weight:700}
+.req-head{display:flex;align-items:flex-start;gap:6px}
+.req-head .req-name{flex:1}
+.tpl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tpl select{flex:1;min-width:0}
+details.json{margin-top:12px}
+details.json summary{cursor:pointer;font-size:12.5px;color:#cbb7ea}
+details.json pre{background:#1d0738;color:#e9ddff;padding:10px;border-radius:var(--r-s);font-size:11.5px;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:var(--r-s);max-width:min(560px,92vw);box-shadow:0 8px 24px rgba(36,21,54,.25);display:none;z-index:9}
+.toast.show{display:block}
+.fatal{max-width:560px;margin:80px auto;background:#fff;border-radius:var(--r-m);padding:28px}
+</style>
+</head>
+<body>
+<div class="bar"><div class="bar-in"><div class="mark">Bulk<b>Ex</b></div><div class="bar-note" id="catalogNote"></div></div></div>
+<div class="sample" id="sampleBanner" hidden>Sample field list for review. Setup will replace it with the fields found in your database.</div>
+<div id="app"></div>
+<div class="admin-note" id="adminNote" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="_system/catalog.js"></script>
+<script>
+"use strict";
+/* ---------- constants ---------- */
+const TEXT_OPS=[
+  ["is_any_of","is"],["is_none_of","is not"],["starts_with","starts with"],["not_starts_with","doesn't start with"],
+  ["contains","contains"],["not_contains","doesn't contain"],["ends_with","ends with"],
+  ["length_is","has exactly … characters"],["is_empty","is empty"],["is_not_empty","is not empty"]];
+const NUM_OPS=[
+  ["is_any_of","is"],["between","is between"],["gt","is more than"],["gte","is at least"],
+  ["lt","is less than"],["lte","is at most"],["is_empty","is empty"],["is_not_empty","is not empty"]];
+const NO_VALUE=new Set(["is_empty","is_not_empty"]);
+const SINGLE_NUM=new Set(["gt","gte","lt","lte"]);
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const LS={name:"bulkex.requester",tpl:"bulkex.templates",sent:"bulkex.sent",last:"bulkex.lastResult",ui:"bulkex.panels"};
+const CAT=window.BULKEX_CATALOG||null;
+const app=document.getElementById("app");
+let refs={};
+let dirHandle=null;
+const fsSupported=typeof window.showDirectoryPicker==="function";
+
+/* ---------- helpers ---------- */
+function h(tag,attrs,...kids){const el=document.createElement(tag);
+  for(const [k,v] of Object.entries(attrs||{})){
+    if(v==null||v===false)continue;
+    if(k==="class")el.className=v; else if(k.startsWith("on"))el.addEventListener(k.slice(2),v);
+    else if(k==="text")el.textContent=v; else el.setAttribute(k,v===true?"":v);}
+  for(const kid of kids.flat()){if(kid==null||kid===false)continue;el.append(kid.nodeType?kid:document.createTextNode(String(kid)));}
+  return el;}
+const opt=(value,label,selected)=>{const o=h("option",{value},label);if(selected)o.selected=true;return o;};
+const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+let uid=0;const nid=()=>"n"+(++uid);
+const slug=s=>(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D")
+  .toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40);
+function toast(msg,ms){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");
+  clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("show"),ms||4200);}
+function listText(vals,joiner){if(vals.length<=1)return vals.join("");
+  const show=vals.length>6?vals.slice(0,5).concat(["+"+(vals.length-5)+" more"]):vals;
+  return show.slice(0,-1).join(", ")+" "+joiner+" "+show[show.length-1];}
+
+/* ---------- data model ----------
+   Every data set (export, import) has its own filter and its own result settings.
+   "Export + Import" simply sends both parts in one request; months can be shared or separate. */
+const DS_KEYS=CAT?Object.keys(CAT.datasets):[];
+const HAS_BOTH=DS_KEYS.includes("export")&&DS_KEYS.includes("import");
+const S={dataset:null,months:[],split:false,monthsBy:{},filters:{},outputs:{},fTab:null,rTab:null,name:""};
+const sets=()=>S.dataset==="both"?["export","import"]:[S.dataset];
+const dsLabel=k=>k==="both"?"Export + Import":(CAT.datasets[k].label||k);
+const fieldsOf=ds=>CAT.datasets[ds].fields;
+const fieldOf=(k,ds)=>fieldsOf(ds).find(f=>f.key===k);
+function grouped(fields){const g=new Map();for(const f of fields){const k=f.group||"Other";if(!g.has(k))g.set(k,[]);g.get(k).push(f);}return g;}
+function periods(only){const s=new Set();for(const k of (only?[only]:sets()))(CAT.datasets[k].periods||[]).forEach(p=>s.add(p));return [...s].sort();}
+const splitOn=()=>S.dataset==="both"&&S.split;
+const monthsFor=ds=>splitOn()?(S.monthsBy[ds]||[]):S.months;
+const rawTitle=f=>f?"Database column: "+f.key:null;
+const opsFor=f=>f&&f.type==="number"?NUM_OPS:TEXT_OPS;
+const opLabel=(f,op)=>(opsFor(f).find(o=>o[0]===op)||["",op])[1];
+function defaultOp(f){if(f.type==="number")return"between";
+  if(f.default_op&&TEXT_OPS.some(o=>o[0]===f.default_op))return f.default_op;return"is_any_of";}
+const essentials=ds=>fieldsOf(ds).filter(f=>f.essential).map(f=>f.key);
+function walk(g,fn){for(const it of g.items){fn(it,g);if(it.kind==="group")walk(it,fn);}}
+const newRoot=()=>({kind:"group",id:nid(),match:"all",items:[]});
+function newCond(){return {kind:"cond",id:nid(),field:"",op:"is_any_of",values:[],v1:"",v2:"",n:""};}
+function newGroup(match){return {kind:"group",id:nid(),match:match||"any",items:[newCond()]};}
+/* fields used by a data set's filter, in the order they appear */
+function filterKeys(ds){const out=[];walk(S.filters[ds],it=>{if(it.kind==="cond"&&it.field&&!out.includes(it.field))out.push(it.field);});return out;}
+/* the columns that really go in the Detail sheet: the user's choice plus every filtered field */
+function effectiveColumns(ds){const o=S.outputs[ds];const cols=o.columns.filter(k=>fieldOf(k,ds));
+  for(const k of filterKeys(ds))if(!cols.includes(k))cols.push(k);return cols;}
+
+/* result settings are remembered per data set in this browser */
+function newOutput(ds){
+  const base={rows:true,summary:false,columns:essentials(ds),sortField:"",sortDir:"desc",distinct:false,groupBy:[],sums:[],top:"20"};
+  const r=(lsGet(LS.last,{})||{})[ds];if(!r)return base;
+  const ok=k=>!!fieldOf(k,ds);
+  return Object.assign(base,r,{columns:(r.columns||[]).filter(ok),groupBy:(r.groupBy||[]).filter(ok),sums:(r.sums||[]).filter(ok),
+    sortField:ok(r.sortField)?r.sortField:""});}
+function remember(){const all=lsGet(LS.last,{})||{};
+  for(const ds of DS_KEYS){const o=S.outputs[ds];if(!o)continue;
+    all[ds]={rows:o.rows,summary:o.summary,columns:o.columns,sortField:o.sortField,sortDir:o.sortDir,distinct:o.distinct,groupBy:o.groupBy,sums:o.sums,top:o.top};}
+  lsSet(LS.last,all);}
+function upgradeOutput(o,ds){o=Object.assign(newOutput(ds),o||{});
+  if(o.mode){o.rows=o.mode==="rows";o.summary=o.mode==="summary";delete o.mode;}
+  const ok=k=>!!fieldOf(k,ds);o.columns=o.columns.filter(ok);o.groupBy=o.groupBy.filter(ok);o.sums=o.sums.filter(ok);return o;}
+function fmtMonths(ms){
+  const byYear=new Map();for(const p of ms){const [y,m]=p.split("-");if(!byYear.has(y))byYear.set(y,[]);byYear.get(y).push(+m);}
+  const parts=[];
+  for(const [y,arr] of byYear){arr.sort((a,b)=>a-b);
+    if(arr.length===12){parts.push("all of "+y);continue;}
+    const runs=[];let s=arr[0],p=arr[0];
+    for(const m of arr.slice(1).concat([null])){if(m===p+1){p=m;continue;}
+      runs.push(s===p?MONTHS[s-1]:(p===s+1?MONTHS[s-1]+", "+MONTHS[p-1]:MONTHS[s-1]+"–"+MONTHS[p-1]));s=p=m;}
+    parts.push(runs.join(", ")+" "+y);}
+  return listText(parts,"and");}
+
+/* ---------- sliding segmented controls ---------- */
+const segPos={};
+function seg(id,label,items,current,onPick,small){
+  return h("div",{class:"seg"+(small?" small":""),role:"group","aria-label":label,"data-seg":id},
+    h("span",{class:"seg-ind","aria-hidden":"true"}),
+    items.map(([k,l])=>h("button",{type:"button","aria-pressed":String(k===current),onclick:()=>{if(k!==current)onPick(k);}},l)));}
+function placeSegs(animate){
+  document.querySelectorAll(".seg[data-seg]").forEach(sg=>{
+    const on=sg.querySelector("button[aria-pressed=true]");const ind=sg.querySelector(".seg-ind");if(!on||!ind)return;
+    const to={x:on.offsetLeft,w:on.offsetWidth};const id=sg.dataset.seg;const from=animate&&segPos[id]?segPos[id]:to;
+    ind.style.transition="none";ind.style.width=from.w+"px";ind.style.transform="translateX("+from.x+"px)";
+    void ind.offsetWidth;
+    ind.style.transition="";ind.style.width=to.w+"px";ind.style.transform="translateX("+to.x+"px)";
+    segPos[id]=to;});}
+window.addEventListener("resize",()=>placeSegs(false));
+
+/* ---------- boot ---------- */
+function boot(){
+  if(!CAT||!DS_KEYS.length){
+    app.append(h("div",{class:"fatal"},h("h2",{text:"BulkEx can't find its field list"}),
+      h("p",{text:"The file _system/catalog.js is missing next to this page. Run setup on the database machine, wait for the runner to start, then reopen this page."})));
+    return;}
+  document.getElementById("sampleBanner").hidden=!CAT.sample;
+  const rep=CAT.label_report||{};const miss=rep.unlabeled||[],unused=rep.unused||[];
+  if(miss.length||unused.length){const n=document.getElementById("adminNote");n.hidden=false;
+    if(miss.length)n.append(miss.length+" database column"+(miss.length>1?"s have":" has")+" no English name yet, so the raw name is shown: ",
+      h("code",{},miss.join(", ")),". ");
+    if(unused.length)n.append(unused.length+" name"+(unused.length>1?"s":"")+" in labels.yaml match no column here: ",h("code",{},unused.join(", ")),". ");
+    n.append("Fix them in app/labels.yaml.");}
+  document.getElementById("catalogNote").textContent="Field list updated "+(CAT.generated_at||"").replace("T"," ").slice(0,16);
+  S.dataset=DS_KEYS[0];S.fTab=S.rTab=DS_KEYS[0];
+  for(const ds of DS_KEYS){S.filters[ds]=newRoot();S.outputs[ds]=newOutput(ds);S.monthsBy[ds]=[];}
+  S.months=periods().slice(-3);
+  (async()=>{if(fsSupported){dirHandle=await idbGet("dir")||null;drawDest();}})();
+  renderAll(false);loadStatus();setInterval(loadStatus,20000);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>placeSegs(false));
+}
+
+/* ---------- render ---------- */
+function renderAll(animate){
+  const keep=refs.presetName;app.textContent="";refs={presetName:keep};
+  app.append(h("div",{class:"wrap"},
+    h("main",{},stepData(),stepFilters(),stepOutput()),
+    h("aside",{},askPanel(),templatesPanel(),requestsPanel())));
+  updateAsk();renderRequests();
+  placeSegs(animate!==false);}
+/* in Export + Import, Filters and Result each show one table at a time */
+const tabsOn=()=>S.dataset==="both";
+const fDs=()=>tabsOn()?S.fTab:S.dataset;
+const rDs=()=>tabsOn()?S.rTab:S.dataset;
+function tabItems(kind){return ["export","import"].map(ds=>{
+  const n=kind==="f"?filterKeys(ds).length:(S.outputs[ds].rows?effectiveColumns(ds).length:0);
+  const tag=kind==="f"?(n?" ("+n+")":""):(n?" ("+n+" col)":"");
+  return [ds,dsLabel(ds)+tag];});}
+
+function stepData(){
+  const choices=DS_KEYS.map(k=>[k,dsLabel(k)]);if(HAS_BOTH)choices.push(["both","Export + Import"]);
+  const sec=h("section",{class:"step"},
+    h("div",{class:"step-head"},h("h2",{text:"Data"})),
+    h("p",{class:"hint",text:S.dataset==="both"
+      ?"You get one file with an Export part and an Import part. Each part has its own filters and columns below."
+      :"Pick export or import records, then click the months you need. Click a year to take the whole year."}),
+    seg("dataset","Data set",choices,S.dataset,switchDataset));
+  if(S.dataset==="both"){
+    sec.append(h("div",{class:"row",style:"margin-top:16px"},h("span",{class:"lab"},"Months"),
+      seg("months","Months for export and import",[["same","Same for both"],["diff","Different for each"]],S.split?"diff":"same",k=>{
+        if(k==="diff"){S.monthsBy={export:S.months.filter(p=>periods("export").includes(p)),import:S.months.filter(p=>periods("import").includes(p))};S.split=true;}
+        else S.split=false;
+        renderAll();},true)));}
+  if(splitOn()){
+    for(const k of ["export","import"])sec.append(monthBlock(dsLabel(k)+" months",periods(k),()=>S.monthsBy[k],v=>{S.monthsBy[k]=v;}));
+  }else sec.append(monthBlock(S.dataset==="both"?"":"Months",periods(),()=>S.months,v=>{S.months=v;}));
+  return sec;}
+function monthBlock(title,avail,get,set){
+  const count=h("span",{class:"count"});
+  const grid=h("div",{class:"months",role:"group","aria-label":title||"Months"});
+  const box=h("div",{});
+  const commit=v=>{set([...new Set(v)].sort());draw();updateAsk();};
+  function draw(){
+    grid.textContent="";const av=new Set(avail);const chosen=new Set(get());
+    const years=[...new Set(avail.map(p=>p.slice(0,4)))].sort().reverse();
+    for(const y of years){
+      const ym=MONTHS.map((_,i)=>y+"-"+String(i+1).padStart(2,"0")).filter(p=>av.has(p));
+      const n=ym.filter(p=>chosen.has(p)).length;
+      grid.append(h("button",{type:"button",class:"yr","data-full":String(n>0&&n===ym.length),"data-part":String(n>0&&n<ym.length),
+        title:"Select or clear all of "+y,"aria-label":"All of "+y,
+        onclick:()=>commit(n===ym.length?get().filter(p=>!p.startsWith(y)):get().concat(ym))},y));
+      MONTHS.forEach((m,i)=>{const p=y+"-"+String(i+1).padStart(2,"0");
+        grid.append(h("button",{type:"button",class:"mo","data-n":String(i+1),"aria-label":m+" "+y,
+          "aria-pressed":String(chosen.has(p)),disabled:!av.has(p),title:av.has(p)?null:"No data for "+m+" "+y,
+          onclick:()=>commit(chosen.has(p)?get().filter(x=>x!==p):get().concat([p]))},m));});}
+    count.textContent=get().length?get().length+" selected":"none selected";}
+  draw();
+  box.append(h("div",{class:"grid-title"},title||null,count));
+  box.append(grid,h("div",{class:"quick"},h("span",{class:"lab"},"Quick pick"),
+    [3,6,9,12].map(n=>h("button",{type:"button",class:"link",title:"The latest "+n+" months that have data",onclick:()=>commit(avail.slice(-n))},"Last "+n+" months")),
+    h("button",{type:"button",class:"link",onclick:()=>{set([]);draw();updateAsk();}},"Clear")));
+  return box;}
+function switchDataset(k){
+  S.dataset=k;
+  if(k!=="both"){S.split=false;S.fTab=S.rTab=k;}
+  const av=new Set(periods());S.months=S.months.filter(p=>av.has(p));if(!S.months.length)S.months=periods().slice(-3);
+  renderAll();}
+
+/* ---------- filters ---------- */
+function stepFilters(){
+  const ds=fDs();
+  refs.filters=h("div",{});drawFilters();
+  const sec=h("section",{class:"step"},h("div",{class:"step-head"},h("h2",{text:"Filters"})));
+  if(tabsOn()){refs.fhead=h("div",{class:"tabs-row"});drawFilterHead();sec.append(refs.fhead);}
+  sec.append(h("p",{class:"hint",text:(tabsOn()?"These conditions apply to "+dsLabel(ds).toLowerCase()+" records only. ":"")+
+    "Each condition can hold many values — type them, or paste a whole column from Excel. Every field you filter on is also added to the file."}),refs.filters);
+  return sec;}
+function drawFilterHead(){
+  if(!refs.fhead||!tabsOn())return;const ds=fDs();const other=ds==="export"?"import":"export";
+  refs.fhead.textContent="";
+  refs.fhead.append(seg("ftab","Filters for",tabItems("f"),ds,k=>{S.fTab=k;renderAll();}),
+    filterKeys(ds).length?h("button",{type:"button",class:"link",title:"Copy these conditions to the "+dsLabel(other)+" filters, skipping fields "+dsLabel(other)+" doesn't have",
+      onclick:()=>copyFilters(ds,other)},"Copy to "+dsLabel(other)):null);}
+function drawFilters(){refs.filters.textContent="";refs.filters.append(groupView(S.filters[fDs()],true,fDs()));}
+function filtersChanged(){drawFilters();drawFilterHead();refreshResultCols();updateAsk();}
+/* the Result section shows filtered fields too, so keep it in step without rebuilding the page */
+function refreshResultCols(){
+  if(!refs.result)return;const old=refs.result;old.replaceWith(stepOutput());
+  placeSegs(false);}
+function copyFilters(from,to){
+  const keys=new Set(fieldsOf(to).map(f=>f.key));let skipped=0;
+  const clone=g=>({kind:"group",id:nid(),match:g.match,items:g.items.map(it=>it.kind==="group"?clone(it):
+    (it.field&&!keys.has(it.field)?(skipped++,null):Object.assign(JSON.parse(JSON.stringify(it)),{id:nid()}))).filter(Boolean).filter(it=>it.kind!=="group"||it.items.length)});
+  const add=clone(S.filters[from]);
+  const target=S.filters[to];
+  if(target.items.length&&!confirm(dsLabel(to)+" already has filters. Add these to them? (Cancel replaces them.)"))target.items=[];
+  target.items.push(...add.items);
+  S.fTab=to;renderAll();
+  toast("Copied to "+dsLabel(to)+(skipped?" — "+skipped+" condition"+(skipped>1?"s were":" was")+" skipped because "+dsLabel(to)+" has no such field.":"."),4500);}
+function fieldSelect(c,ds){
+  const sel=h("select",{"aria-label":"Field",onchange:e=>{c.field=e.target.value;const f=fieldOf(c.field,ds);
+    c.op=defaultOp(f);c.values=[];c.v1=c.v2=c.n="";filtersChanged();focusVal(c.id);}});
+  sel.append(opt("","Choose a field…",!c.field));
+  for(const [g,fs] of grouped(fieldsOf(ds)))sel.append(h("optgroup",{label:g},fs.map(f=>{const o=opt(f.key,f.label,f.key===c.field);o.title=rawTitle(f);return o;})));
+  if(c.field)sel.title=rawTitle(fieldOf(c.field,ds));
+  return sel;}
+function opSelect(c,ds){const f=fieldOf(c.field,ds);
+  return h("select",{"aria-label":"Condition",disabled:!f,onchange:e=>{c.op=e.target.value;filtersChanged();focusVal(c.id);}},
+    opsFor(f).map(([k,l])=>opt(k,l,k===c.op)));}
+function focusVal(id){const el=document.querySelector('[data-val="'+id+'"]');if(el)el.focus();}
+function valueEditor(c,ds){
+  const f=fieldOf(c.field,ds);
+  if(!f)return h("div",{class:"val"});
+  if(NO_VALUE.has(c.op))return h("div",{class:"val val-meta"},"No value needed.");
+  if(c.op==="between")return h("div",{class:"val pair"},
+    h("input",{type:"number",value:c.v1,placeholder:"from","aria-label":"From","data-val":c.id,oninput:e=>{c.v1=e.target.value;updateAsk();}}),
+    h("span",{},"and"),
+    h("input",{type:"number",value:c.v2,placeholder:"to","aria-label":"To",oninput:e=>{c.v2=e.target.value;updateAsk();}}));
+  if(SINGLE_NUM.has(c.op))return h("div",{class:"val"},
+    h("input",{type:"number",value:c.v1,"aria-label":"Value","data-val":c.id,oninput:e=>{c.v1=e.target.value;updateAsk();}}));
+  if(c.op==="length_is")return h("div",{class:"val pair"},
+    h("input",{type:"number",min:"1",value:c.n,"aria-label":"Number of characters","data-val":c.id,style:"max-width:110px",oninput:e=>{c.n=e.target.value;updateAsk();}}),
+    h("span",{class:"val-meta",style:"margin:0"},"characters"));
+  return chipInput(c,f);}
+function chipInput(c,f){
+  const listId="dl_"+c.id;
+  const ph=()=>c.values.length?"":(f.type==="number"?"Type a number, press Enter":"Type, press Enter — or paste a list");
+  const input=h("input",{type:"text","data-val":c.id,list:f.values?listId:null,placeholder:ph(),"aria-label":"Values for "+f.label});
+  const wrap=h("div",{class:"chips",onclick:()=>input.focus()});
+  const meta=h("div",{class:"val-meta"});
+  function redraw(){wrap.querySelectorAll(".chip").forEach(n=>n.remove());
+    c.values.forEach((v,i)=>wrap.insertBefore(h("span",{class:"chip"},h("span",{title:v},v),
+      h("button",{type:"button","aria-label":"Remove "+v,onclick:e=>{e.stopPropagation();c.values.splice(i,1);redraw();updateAsk();}},"×")),input));
+    meta.textContent="";
+    if(c.values.length>1)meta.append(h("span",{},c.values.length+" values — a row matches if it fits any one of them"));
+    if(c.values.length)meta.append(h("button",{type:"button",class:"link",style:"padding:0;font-size:12.5px",onclick:()=>{c.values=[];redraw();updateAsk();}},"Clear all"));
+    input.placeholder=ph();}
+  function add(raw){const parts=String(raw).split(/[\n\r\t,;]+/).map(s=>s.trim()).filter(Boolean);
+    let added=0;for(const p of parts){if(!c.values.includes(p)){c.values.push(p);added++;}}
+    if(added){redraw();updateAsk();}return parts.length;}
+  input.addEventListener("keydown",e=>{
+    if((e.key==="Enter"||e.key===",")&&input.value.trim()){e.preventDefault();add(input.value);input.value="";}
+    else if(e.key==="Backspace"&&!input.value&&c.values.length){c.values.pop();redraw();updateAsk();}});
+  input.addEventListener("paste",e=>{const t=(e.clipboardData||window.clipboardData).getData("text");
+    if(/[\n\t,;]/.test(t)){e.preventDefault();const n=add(t);toast("Added "+n+" pasted value"+(n>1?"s":"")+".",2500);}});
+  input.addEventListener("change",()=>{const v=input.value.trim();if(v&&f.values&&f.values.includes(v)){add(v);input.value="";}});
+  input.addEventListener("blur",()=>{if(input.value.trim()){add(input.value);input.value="";}});
+  wrap.append(input);redraw();
+  const out=h("div",{class:"val"},wrap,meta);
+  if(f.values)out.append(h("datalist",{id:listId},f.values.map(v=>h("option",{value:v}))));
+  return out;}
+function condView(c,parent,root,ds){
+  return h("div",{class:"cond"},fieldSelect(c,ds),opSelect(c,ds),valueEditor(c,ds),
+    h("button",{type:"button",class:"x","aria-label":"Remove condition",title:"Remove condition",onclick:()=>{
+      parent.items=parent.items.filter(i=>i!==c);
+      if(parent!==root&&!parent.items.length)root.items=root.items.filter(i=>i!==parent);
+      filtersChanged();}},"×"));}
+function matchSelect(g){return h("select",{"aria-label":"Match",onchange:e=>{g.match=e.target.value;filtersChanged();}},
+  opt("all","all",g.match==="all"),opt("any","any",g.match==="any"));}
+function groupView(g,isRoot,ds,root){
+  root=root||g;
+  const box=h("div",{class:"group"+(isRoot?" root":"")});
+  if(isRoot){
+    if(g.items.length)box.append(h("div",{class:"group-head"},"Keep rows that match",matchSelect(g),"of these:"));
+    else box.append(h("p",{class:"empty-filters",text:"No filters yet — every row in the chosen months is included. Add a condition to narrow it down."}));
+  }else box.append(h("div",{class:"group-head"},"Group: match",matchSelect(g),"of these",
+    h("button",{type:"button",class:"link",style:"margin-left:auto",onclick:()=>{root.items=root.items.filter(i=>i!==g);filtersChanged();}},"Remove group")));
+  g.items.forEach((it,i)=>{
+    if(i>0)box.append(h("div",{class:"joiner"},g.match==="all"?"and":"or"));
+    box.append(it.kind==="group"?groupView(it,false,ds,root):condView(it,g,root,ds));});
+  box.append(h("div",{class:"adders"},
+    h("button",{type:"button",class:"link",onclick:()=>{g.items.push(newCond());filtersChanged();
+      const all=document.querySelectorAll(".cond select[aria-label=Field]");const empty=[...all].filter(s=>!s.value);
+      (empty[empty.length-1]||all[all.length-1]).focus();}},"+ Add condition"),
+    isRoot?h("button",{type:"button",class:"link",onclick:()=>{g.items.push(newGroup(g.match==="all"?"any":"all"));filtersChanged();}},"+ Add group (either / or)"):null));
+  return box;}
+
+/* ---------- result ---------- */
+function stepOutput(){
+  const ds=rDs();const o=S.outputs[ds];
+  const part=(key,title,desc)=>h("label",{class:"part"},
+    h("input",{type:"checkbox",checked:o[key],onchange:e=>{o[key]=e.target.checked;renderAll();}}),
+    h("div",{},h("b",{},title),h("span",{},desc)));
+  const sec=h("section",{class:"step"},h("div",{class:"step-head"},h("h2",{text:"Result"})));
+  if(tabsOn())sec.append(h("div",{class:"tabs-row"},seg("rtab","Result for",tabItems("r"),ds,k=>{S.rTab=k;renderAll();})));
+  sec.append(
+    h("p",{class:"hint",text:(tabsOn()?"Settings for the "+dsLabel(ds)+" part. ":"")+"Tick what you want. With both ticked you get a Detail sheet and a Summary sheet."}),
+    h("div",{class:"parts"},
+      part("rows","Detail rows","Every matching record, with the columns you choose."),
+      part("summary","Summary","One row per importer, country, HS code… with counts and totals.")));
+  if(o.rows)sec.append(detailBlock(o,ds));
+  if(o.summary)sec.append(summaryBlock(o,ds));
+  refs.result=sec;
+  return sec;}
+function detailBlock(o,ds){
+  const fields=fieldsOf(ds);const used=new Set(filterKeys(ds));const cols=effectiveColumns(ds);
+  const list=h("div",{class:"col-list"},cols.length?cols.map(k=>{const f=fieldOf(k,ds);const locked=used.has(k);
+    return h("span",{class:"chip"+(locked?" locked":""),title:locked?"Used in a filter, so it is always in the file. "+rawTitle(f):rawTitle(f)},
+      h("span",{},f.label),locked?h("small",{},"filter"):null,
+      locked?null:h("button",{type:"button","aria-label":"Remove "+f.label,onclick:()=>{o.columns=o.columns.filter(x=>x!==k);renderAll();}},"×"));})
+    :h("span",{class:"val-meta"},"No columns yet — add some below or pick a set."));
+  const add=h("select",{class:"col-add","aria-label":"Add a column",onchange:e=>{if(e.target.value){o.columns.push(e.target.value);renderAll();}}},
+    opt("","Add a column…",true));
+  for(const [g,fs] of grouped(fields)){const left=fs.filter(f=>!cols.includes(f.key));
+    if(left.length)add.append(h("optgroup",{label:g},left.map(f=>{const x=opt(f.key,f.label);x.title=rawTitle(f);return x;})));}
+  return h("div",{class:"block"},
+    h("p",{class:"block-title"},"Detail sheet",h("span",{class:"count"},cols.length+" column"+(cols.length===1?"":"s"))),
+    h("div",{class:"col-tools"},h("span",{class:"lab"},"Start from:"),
+      h("button",{type:"button",class:"link",title:"The company's standard set (set by the admin in labels.yaml)",onclick:()=>{o.columns=essentials(ds);renderAll();}},"Essentials"),
+      h("button",{type:"button",class:"link",onclick:()=>{o.columns=fields.map(f=>f.key);renderAll();}},"All columns"),
+      h("button",{type:"button",class:"link",onclick:()=>{o.columns=[];renderAll();}},"Clear"),
+      h("span",{class:"val-meta",style:"margin:0 0 0 auto"},"Remembered on this computer.")),
+    list,add,
+    h("div",{class:"opts"},h("span",{class:"lab"},"Sort by"),
+      h("select",{"aria-label":"Sort by",onchange:e=>{o.sortField=e.target.value;updateAsk();}},opt("","No sorting",!o.sortField),
+        [...grouped(fields)].map(([g,fs])=>h("optgroup",{label:g},fs.map(f=>{const x=opt(f.key,f.label,f.key===o.sortField);x.title=rawTitle(f);return x;})))),
+      h("select",{"aria-label":"Sort direction",onchange:e=>{o.sortDir=e.target.value;updateAsk();}},
+        opt("desc","largest first",o.sortDir==="desc"),opt("asc","smallest first",o.sortDir==="asc")),
+      h("label",{class:"check",style:"margin-left:auto"},h("input",{type:"checkbox",checked:o.distinct,onchange:e=>{o.distinct=e.target.checked;updateAsk();}}),"Remove duplicate rows")));}
+function summaryBlock(o,ds){
+  const ff=fieldsOf(ds);const nums=ff.filter(f=>f.type==="number");
+  const addSel=(list,pool,ph)=>{const s=h("select",{onchange:e=>{if(e.target.value&&!list.includes(e.target.value))list.push(e.target.value);renderAll();}},opt("",ph,true));
+    for(const [g,fs] of grouped(pool.filter(f=>!list.includes(f.key))))s.append(h("optgroup",{label:g},fs.map(f=>{const x=opt(f.key,f.label);x.title=rawTitle(f);return x;})));return s;};
+  const lbl=k=>(fieldOf(k,ds)||{}).label||k;
+  const pills=list=>h("div",{class:"col-list"},list.map(k=>h("span",{class:"chip",title:rawTitle(fieldOf(k,ds))},h("span",{},lbl(k)),
+    h("button",{type:"button","aria-label":"Remove "+lbl(k),onclick:()=>{list.splice(list.indexOf(k),1);renderAll();}},"×"))));
+  const heads=o.groupBy.map(k=>h("th",{},lbl(k))).concat([h("th",{class:"num"},"Records")],o.sums.map(k=>h("th",{class:"num"},"Total "+lbl(k))));
+  const dummy=()=>h("tr",{},o.groupBy.map(()=>h("td",{},"…")).concat([h("td",{class:"num"},"…")],o.sums.map(()=>h("td",{class:"num"},"…"))));
+  const phText=o.groupBy.length
+    ?"Summary sheet: one row for each "+listText(o.groupBy.map(lbl),"+")+(+o.top>0?", only the "+(+o.top)+" with the most records":"")+", most records first."
+    :"Pick what each row stands for — for example Importer Name gives one row per importer.";
+  return h("div",{class:"block"},
+    h("p",{class:"block-title"},"Summary sheet"),
+    h("p",{class:"hint",style:"margin:6px 0 0",text:"Counts records instead of listing them. Example: one row per Importer Name, showing how many declarations each importer has and their total Invoice Value."}),
+    h("div",{class:"sub"},h("span",{class:"lab"},"One row for each"),pills(o.groupBy),addSel(o.groupBy,ff,"Add a field…")),
+    h("div",{class:"sub"},h("span",{class:"lab"},"Add up (number of records is always counted)"),pills(o.sums),addSel(o.sums,nums,"Add a total of…")),
+    h("div",{class:"opts"},h("label",{class:"lab",for:"topN"},"Keep only the top"),
+      h("input",{id:"topN",type:"number",min:"1",value:o.top,style:"width:90px",onchange:e=>{o.top=e.target.value;renderAll();}}),
+      h("span",{class:"val-meta",style:"margin:0"},"rows — leave empty for all")),
+    h("div",{class:"preview"},h("div",{class:"ph"},phText),
+      o.groupBy.length?h("table",{},h("thead",{},h("tr",{},heads)),h("tbody",{},dummy(),dummy())):null));}
+
+/* ---------- sentence + validation ---------- */
+function condComplete(c,ds){const f=fieldOf(c.field,ds);if(!f)return false;if(NO_VALUE.has(c.op))return true;
+  if(c.op==="between")return c.v1!==""&&c.v2!=="";if(SINGLE_NUM.has(c.op))return c.v1!=="";
+  if(c.op==="length_is")return +c.n>0;return c.values.length>0;}
+function condSentence(c,ds){
+  const f=fieldOf(c.field,ds);const frag=document.createDocumentFragment();
+  frag.append(h("span",{class:"f"},f.label)," ");
+  if(!condComplete(c,ds)){frag.append(h("span",{class:"op"},opLabel(f,c.op))," ",h("span",{class:"warn"},"…"));return frag;}
+  let op=opLabel(f,c.op),val="";
+  if(c.op==="between")val=c.v1+" and "+c.v2;
+  else if(SINGLE_NUM.has(c.op))val=c.v1;
+  else if(c.op==="length_is"){op="has exactly";val=c.n+" characters";}
+  else if(!NO_VALUE.has(c.op))val=listText(c.values,c.op==="is_none_of"||c.op.startsWith("not_")?"nor":"or");
+  if(c.op==="is_none_of"&&c.values.length>1)op="is neither";
+  frag.append(h("span",{class:"op"},op));if(val)frag.append(" ",h("span",{class:"v"},val));
+  return frag;}
+function groupSentence(g,ds){
+  const frag=document.createDocumentFragment();
+  const items=g.items.filter(it=>it.kind==="cond"?!!it.field:it.items.some(x=>x.field));
+  items.forEach((it,i)=>{
+    if(i>0)frag.append(h("span",{class:"op"},g.match==="all"?" and ":" or "));
+    if(it.kind==="group")frag.append("(",groupSentence(it,ds),")");else frag.append(condSentence(it,ds));});
+  return frag;}
+function partSentence(ds,onlySummary){
+  const frag=document.createDocumentFragment();const o=S.outputs[ds];const ms=monthsFor(ds);
+  frag.append(h("span",{class:"f"},dsLabel(ds).toLowerCase()+" records")," for ",
+    ms.length?h("span",{class:"v"},fmtMonths(ms)):h("span",{class:"warn"},"…"));
+  if(S.filters[ds].items.some(it=>it.kind==="group"||it.field))frag.append(" where ",groupSentence(S.filters[ds],ds));
+  if(o.summary){
+    frag.append(o.rows?", plus a summary by ":(onlySummary?", by ":", summarised by "),
+      o.groupBy.length?h("span",{class:"v"},listText(o.groupBy.map(k=>(fieldOf(k,ds)||{}).label||k),"and")):h("span",{class:"warn"},"…"));
+    if(o.sums.length)frag.append(" with total ",h("span",{class:"v"},listText(o.sums.map(k=>(fieldOf(k,ds)||{}).label||k),"and")));
+    if(+o.top>0)frag.append(", top ",h("span",{class:"v"},String(+o.top)));}
+  return frag;}
+function problems(){
+  const p=[];const pre=ds=>tabsOn()?dsLabel(ds)+": ":"";
+  for(const ds of sets()){
+    if(!monthsFor(ds).length)p.push(pre(ds)+"pick at least one month.");
+    let incomplete=0,empty=0;walk(S.filters[ds],it=>{if(it.kind==="cond"){if(!it.field)empty++;else if(!condComplete(it,ds))incomplete++;}});
+    if(empty)p.push(pre(ds)+empty+" condition"+(empty>1?"s have":" has")+" no field chosen.");
+    if(incomplete)p.push(pre(ds)+incomplete+" condition"+(incomplete>1?"s need":" needs")+" a value.");
+    const o=S.outputs[ds];
+    if(!o.rows&&!o.summary)p.push(pre(ds)+"tick Detail rows, Summary, or both.");
+    if(o.rows&&!effectiveColumns(ds).length)p.push(pre(ds)+"choose at least one column for the Detail sheet.");
+    if(o.summary&&!o.groupBy.length)p.push(pre(ds)+"pick what each Summary row stands for.");}
+  if(!S.name.trim())p.push("Give the request a name.");
+  if(!(lsGet(LS.name,"")||"").trim())p.push("Add your name in Requested by.");
+  return p.map(x=>x.charAt(0).toUpperCase()+x.slice(1));}
+
+function askPanel(){
+  refs.sentence=h("p",{class:"sentence"});
+  refs.problems=h("ul",{class:"problems",hidden:true});
+  refs.json=h("pre",{});
+  refs.dest=h("div",{class:"dest"});
+  refs.countBtn=h("button",{type:"button",class:"btn btn-ghost",style:"color:#fff;border-color:#7a52b0",
+    title:"Quick check: the runner only counts matching rows and shows the number under Recent requests. No file is made.",onclick:()=>send("count")},"Check row count");
+  refs.exportBtn=h("button",{type:"button",class:"btn btn-primary",title:"Make the file (Excel, or CSV when over 3 million rows). It appears under Recent requests when ready.",onclick:()=>send("export")},"Get the file");
+  const box=h("section",{class:"ask","aria-labelledby":"askH"},
+    h("h2",{id:"askH"},"Your request"),refs.sentence,
+    h("div",{},h("label",{class:"lab",for:"reqName"},"Request name"),
+      h("input",{type:"text",id:"reqName",placeholder:"Required, e.g. laptops HS 8471",value:S.name,oninput:e=>{S.name=e.target.value;updateAsk();}})),
+    h("div",{style:"margin-top:10px"},h("label",{class:"lab",for:"reqWho"},"Requested by"),
+      h("input",{type:"text",id:"reqWho",placeholder:"Required, your name",value:lsGet(LS.name,""),oninput:e=>{lsSet(LS.name,e.target.value.trim());updateAsk();}})),
+    refs.problems,
+    h("div",{class:"row",style:"margin-top:16px"},refs.countBtn,refs.exportBtn),
+    h("p",{class:"ask-help"},h("b",{},"Check row count")," tells you how many rows match in about a minute, without making a file — handy before a big pull. ",
+      h("b",{},"Get the file")," makes the file — Excel, or CSV when it is over 3 million rows."),
+    refs.dest,
+    h("details",{class:"json"},h("summary",{},"Show request file"),refs.json));
+  drawDest();
+  return box;}
+function updateAsk(){
+  if(!refs.sentence)return;
+  const s=refs.sentence;s.textContent="";
+  const ds=sets();const onlySummary=ds.every(k=>!S.outputs[k].rows&&S.outputs[k].summary);
+  s.append(onlySummary?"Summarise ":"Get ");
+  ds.forEach((k,i)=>{if(i)s.append("; and ");s.append(partSentence(k,onlySummary));});
+  s.append(".");
+  const p=problems();
+  refs.problems.textContent="";refs.problems.hidden=!p.length;p.forEach(x=>refs.problems.append(h("li",{},x)));
+  refs.countBtn.disabled=refs.exportBtn.disabled=p.length>0;
+  refs.json.textContent=JSON.stringify(buildRequest("export",true),null,2);
+  remember();}
+
+/* ---------- request file ---------- */
+function exportCond(c){const r={field:c.field,op:c.op};
+  if(c.op==="between")r.values=[c.v1,c.v2];else if(SINGLE_NUM.has(c.op))r.values=[c.v1];
+  else if(c.op==="length_is")r.values=[String(+c.n)];else if(!NO_VALUE.has(c.op))r.values=c.values.slice();
+  return r;}
+function exportGroup(g){return {match:g.match,items:g.items.filter(it=>it.kind==="group"||it.field)
+  .map(it=>it.kind==="group"?exportGroup(it):exportCond(it))};}
+function buildPart(ds){const o=S.outputs[ds];
+  return {dataset:ds,period:{months:monthsFor(ds).slice()},filter:exportGroup(S.filters[ds]),
+    output:{rows:o.rows?{columns:effectiveColumns(ds),sort:o.sortField?[{field:o.sortField,dir:o.sortDir}]:[],distinct:!!o.distinct}:null,
+      summary:o.summary?{group_by:o.groupBy.slice(),measures:[{fn:"count"}].concat(o.sums.map(k=>({fn:"sum",field:k}))),top:+o.top>0?+o.top:null}:null}};}
+function buildRequest(action,preview){
+  const now=new Date();const pad=n=>String(n).padStart(2,"0");
+  const stamp=now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate())+"-"+pad(now.getHours())+pad(now.getMinutes())+pad(now.getSeconds());
+  const who=lsGet(LS.name,"")||"anonymous";
+  return {schema:"bulkex-request/1",
+    id:preview?"(set when sent)":stamp+"-"+(slug(who)||"user")+"-"+(slug(S.name)||action),
+    created_at:preview?"(set when sent)":now.toISOString(),
+    requester:who,name:S.name.trim(),action,description:refs.sentence?refs.sentence.textContent:"",
+    parts:sets().map(buildPart)};}
+
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("bulkex",1);r.onupgradeneeded=()=>r.result.createObjectStore("kv");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbGet(k){try{const db=await idb();return await new Promise(r=>{const q=db.transaction("kv").objectStore("kv").get(k);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null);});}catch(e){return null}}
+async function idbSet(k,v){try{const db=await idb();db.transaction("kv","readwrite").objectStore("kv").put(v,k);}catch(e){}}
+function drawDest(){
+  if(!refs.dest)return;refs.dest.textContent="";refs.dest.classList.toggle("todo",fsSupported&&!dirHandle);
+  if(!fsSupported){refs.dest.append("This browser can't drop requests into the folder for you, so each request downloads as a file. Move that file into the BulkEx input folder.");return;}
+  if(dirHandle){refs.dest.append("✓ Requests go straight to the "+dirHandle.name+" folder.",h("button",{type:"button",class:"link",onclick:pickFolder},"Change folder"));return;}
+  refs.dest.append(h("span",{},h("b",{},"One-time step: "),"show this page where the BulkEx folder is (the one with input and output inside), so requests reach the runner by themselves."),
+    h("button",{type:"button",class:"btn btn-ghost dest-btn",onclick:pickFolder},"Choose BulkEx folder"));}
+async function pickFolder(){
+  try{const d=await window.showDirectoryPicker({id:"bulkex",mode:"readwrite"});
+    try{await d.getDirectoryHandle("input");}catch(e){toast("Pick the BulkEx folder — the one that contains the input and output folders.");return false;}
+    dirHandle=d;await idbSet("dir",d);drawDest();return true;
+  }catch(e){if(e&&e.name!=="AbortError")toast("This browser blocked folder access. Requests will download instead.");return false;}}
+async function writeToFolder(fname,text){
+  if(!dirHandle)return false;
+  try{let perm=await dirHandle.queryPermission({mode:"readwrite"});
+    if(perm!=="granted")perm=await dirHandle.requestPermission({mode:"readwrite"});
+    if(perm!=="granted")return false;
+    const inp=await dirHandle.getDirectoryHandle("input");const fh=await inp.getFileHandle(fname,{create:true});
+    const w=await fh.createWritable();await w.write(text);await w.close();return true;
+  }catch(e){return false;}}
+function download(fname,text){const a=h("a",{href:URL.createObjectURL(new Blob([text],{type:"application/json"})),download:fname});
+  document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);}
+async function send(action){
+  if(problems().length)return;
+  const req=buildRequest(action,false);const fname=req.id+".json";const text=JSON.stringify(req,null,2);
+  if(fsSupported&&!dirHandle)await pickFolder();
+  const ok=await writeToFolder(fname,text);
+  if(!ok)download(fname,text);
+  const sent=lsGet(LS.sent,[]);
+  sent.unshift({id:req.id,name:req.name,requester:req.requester,at:req.created_at,description:req.description,snapshot:snapshot()});
+  lsSet(LS.sent,sent.slice(0,30));
+  renderRequests();
+  toast(ok?(action==="count"?"Sent. The row count shows up under Recent requests in a few minutes.":"Sent. Your file shows up under Recent requests when it's ready.")
+          :"Downloaded "+fname+". Move it into the input folder to run it.",6000);}
+
+/* ---------- side panels ---------- */
+function snapshot(){return JSON.parse(JSON.stringify({v:2,dataset:S.dataset,months:S.months,split:S.split,monthsBy:S.monthsBy,
+  filters:S.filters,outputs:S.outputs,name:S.name,saved:new Date().toISOString()}));}
+function loadSnapshot(p){
+  if(p.dataset!=="both"&&!CAT.datasets[p.dataset]){toast("That request uses a data set this page doesn't have.");return false;}
+  S.dataset=p.dataset;S.months=p.months||[];S.split=!!p.split;S.monthsBy=Object.assign({export:[],import:[]},p.monthsBy||{});S.name=p.name||"";
+  const targets=p.dataset==="both"?["export","import"]:[p.dataset];
+  for(const ds of DS_KEYS){S.filters[ds]=newRoot();S.outputs[ds]=newOutput(ds);}
+  for(const ds of targets){
+    /* presets saved before per-table filters had one filter/output for everything */
+    const f=p.filters?p.filters[ds]:p.filter;const o=p.outputs?p.outputs[ds]:p.output;
+    if(f)S.filters[ds]=reviveGroup(f);if(o)S.outputs[ds]=upgradeOutput(o,ds);}
+  S.fTab=S.rTab=targets[0];
+  return true;}
+function reviveGroup(g){return {kind:"group",id:nid(),match:g.match,items:g.items.map(it=>it.kind==="group"?reviveGroup(it):Object.assign({},it,{id:nid()}))};}
+function foldPanel(id,title,count,body){
+  const open=(lsGet(LS.ui,{})||{})[id]!==false;
+  const d=h("details",{class:"panel",open:open},h("summary",{},h("h2",{},title),count!=null?h("span",{class:"count"},count):null),h("div",{class:"panel-body"},body));
+  d.addEventListener("toggle",()=>{const u=lsGet(LS.ui,{})||{};u[id]=d.open;lsSet(LS.ui,u);});
+  smoothFold(d);
+  return d;}
+function smoothFold(d){
+  const sum=d.querySelector("summary"),body=d.querySelector(".panel-body");
+  const reduce=window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+  sum.addEventListener("click",e=>{
+    if(reduce||!body.animate)return;
+    e.preventDefault();
+    if(d._anim)d._anim.cancel();
+    if(d.open){
+      const h0=body.offsetHeight;
+      d._anim=body.animate([{height:h0+"px",opacity:1},{height:"0px",opacity:0}],{duration:220,easing:"cubic-bezier(.4,0,.2,1)"});
+      d._anim.onfinish=()=>{d.open=false;d._anim=null;};
+    }else{
+      d.open=true;const h1=body.offsetHeight;
+      d._anim=body.animate([{height:"0px",opacity:0},{height:h1+"px",opacity:1}],{duration:260,easing:"cubic-bezier(.2,0,0,1)"});
+      d._anim.onfinish=()=>{d._anim=null;};}});}
+function templatesPanel(){
+  const tpls=lsGet(LS.tpl,{});const names=Object.keys(tpls).sort((a,b)=>a.localeCompare(b));
+  const cur=refs.presetName&&names.includes(refs.presetName)?refs.presetName:"";
+  const sel=h("select",{"aria-label":"My presets",disabled:!names.length},
+    opt("",names.length?"Open a preset…":"No presets yet",!cur),names.map(n=>opt(n,n,n===cur)));
+  sel.addEventListener("change",()=>{const n=sel.value;const p=tpls[n];if(!p)return;
+    if(!loadSnapshot(p))return;
+    refs.presetName=n;renderAll();refs.presetName=n;toast("Opened "+n+". Change what you need, then send or update the preset.",3500);});
+  const save=n=>{const all=lsGet(LS.tpl,{});all[n]=snapshot();lsSet(LS.tpl,all);refs.presetName=n;renderAll();refs.presetName=n;};
+  const fileIn=h("input",{type:"file",accept:".json,application/json",hidden:true,onchange:async e=>{
+    const f=e.target.files[0];if(!f)return;
+    try{const data=JSON.parse(await f.text());const incoming=data.presets||data;let n=0;const all=lsGet(LS.tpl,{});
+      for(const [k,v] of Object.entries(incoming)){if(v&&(v.filters||v.filter)){all[k]=v;n++;}}
+      lsSet(LS.tpl,all);renderAll();toast(n?"Restored "+n+" preset"+(n>1?"s":"")+".":"That file has no BulkEx presets.");}
+    catch(err){toast("That file isn't a BulkEx preset backup.");}}});
+  return foldPanel("presets","My presets",names.length?String(names.length):null,[
+    h("div",{class:"tpl"},sel),
+    h("div",{class:"tpl-actions"},
+      h("button",{type:"button",class:"link",onclick:()=>{const n=(prompt("Name this preset",S.name||"")||"").trim();if(!n)return;
+        if(tpls[n]&&!confirm("Replace the preset called "+n+"?"))return;save(n);toast("Saved preset "+n+".",2500);}},"Save as new"),
+      cur?h("button",{type:"button",class:"link",onclick:()=>{save(cur);toast("Updated "+cur+".",2500);}},"Update "+cur):null,
+      cur?h("button",{type:"button",class:"link",onclick:()=>{if(!confirm("Delete the preset called "+cur+"?"))return;
+        const all=lsGet(LS.tpl,{});delete all[cur];lsSet(LS.tpl,all);refs.presetName="";renderAll();}},"Delete"):null,
+      names.length?h("button",{type:"button",class:"link",onclick:()=>{
+        download("bulkex-presets-"+(slug(lsGet(LS.name,""))||"me")+".json",JSON.stringify({schema:"bulkex-presets/1",presets:lsGet(LS.tpl,{})},null,2));}},"Back up"):null,
+      h("button",{type:"button",class:"link",onclick:()=>fileIn.click()},"Restore"),fileIn),
+    h("p",{class:"tpl-note",text:"A preset keeps a whole request — months, filters and result — under a name you choose. Presets stay in this browser on your computer; use Back up to keep a copy or move them to another computer."})]);}
+
+/* ---------- recent requests (runner status) ---------- */
+function requestsPanel(){refs.reqs=h("div",{});return foldPanel("recent","Recent requests",null,refs.reqs);}
+function loadStatus(){
+  const old=document.getElementById("statusScript");if(old)old.remove();
+  const s=h("script",{id:"statusScript",src:"_system/status.js?t="+Date.now()});
+  s.onload=renderRequests;s.onerror=renderRequests;document.body.append(s);}
+function fileLabel(f,n){
+  const m=f.match(/(?:_(Export|Import))?_(detail|summary)\.csv$/i);
+  if(!m)return n>1?"Open Excel":"Open file";
+  if(n===1)return "Open CSV";
+  return (m[1]?m[1]+" ":"")+m[2].toLowerCase()+" CSV";}
+function renderRequests(){
+  if(!refs.reqs)return;refs.reqs.textContent="";
+  const ui=lsGet(LS.ui,{})||{};const setUi=(k,v)=>{const u=lsGet(LS.ui,{})||{};u[k]=v;lsSet(LS.ui,u);renderRequests();};
+  const me=(lsGet(LS.name,"")||"").toLowerCase();
+  const mineOnly=me&&ui.mineOnly!==false;
+  const st=(window.BULKEX_STATUS&&window.BULKEX_STATUS.requests)||[];
+  const local=lsGet(LS.sent,[]);const byId=new Map(local.map(r=>[r.id,r]));
+  const known=new Set(st.map(r=>r.id));
+  /* sent from this computer but not picked up yet: forget after a day so a lost file doesn't wait forever */
+  const dayAgo=new Date(Date.now()-864e5).toISOString();
+  const sent=local.filter(r=>!known.has(r.id)&&(r.at||"")>dayAgo).map(r=>({id:r.id,name:r.name,requester:r.requester,state:"sent",description:r.description}));
+  const mineF=list=>mineOnly?list.filter(r=>(r.requester||"").toLowerCase()===me):list;
+  const active=mineF(sent.concat(st.filter(r=>r.state==="running"||r.state==="waiting")));
+  const done=mineF(st.filter(r=>r.state==="done")),failed=mineF(st.filter(r=>r.state==="failed"));
+  const tab=ui.reqTab==="failed"?"failed":"done";
+  const bar=h("div",{class:"req-filter"},
+    seg("reqtab","Finished requests",[["done","Done · "+done.length],["failed","Failed · "+failed.length]],tab,k=>setUi("reqTab",k),true),
+    me?h("button",{type:"button",class:"link",style:"padding:0;font-size:13px",onclick:()=>setUi("mineOnly",!mineOnly)},
+      mineOnly?"Show everyone":"Only mine"):null);
+  refs.reqs.append(bar);
+  const shown=(tab==="done"?done:failed);
+  const limit=ui.reqMore?60:12;
+  const list=active.concat(shown.slice(0,limit));
+  if(!list.length)refs.reqs.append(h("p",{class:"hint",style:"margin:6px 0 0",
+    text:tab==="done"?"Nothing here yet. Requests you send show up here with a link to the result.":"No failed requests."}));
+  const WORD={sent:"sent, waiting for the runner",waiting:"waiting",running:"running",done:"ready",failed:"couldn't run"};
+  for(const r of list){
+    const counted=r.state==="done"&&r.action==="count";
+    const tone=r.state==="done"?"ok":(r.state==="failed"?"bad":"");
+    const when=r.finished_at?" · "+r.finished_at.slice(5,16).replace("T"," "):"";
+    const meta=h("div",{class:"req-meta"},r.requester?r.requester+", ":"",
+      h("span",{class:tone?"st-"+tone:null},(counted?"counted":(WORD[r.state]||r.state))+
+        (r.state==="done"&&r.rows!=null?", "+Number(r.rows).toLocaleString("en-US")+" rows":"")),when);
+    const mine=byId.get(r.id);const desc=r.description||(mine||{}).description;
+    const msg=r.message&&!(counted&&/^[^;.]*: [\d,]+ rows$/.test(r.message))?r.message:"";
+    const files=r.files||[];
+    const actions=h("div",{class:"req-actions"},
+      r.state==="done"?files.map(f=>h("a",{href:"output/"+encodeURIComponent(f),target:"_blank",title:f},fileLabel(f,files.length))):null,
+      mine&&mine.snapshot?h("button",{type:"button",class:"link",title:"Load this request into the form to change and send it again",
+        onclick:()=>{if(loadSnapshot(mine.snapshot)){refs.presetName="";renderAll();window.scrollTo({top:0,behavior:"smooth"});toast("Loaded "+(mine.name||"your request")+". Change what you need and send it again.",3500);}}},"Use again"):null);
+    refs.reqs.append(h("div",{class:"req"},h("span",{class:"dot "+r.state,"aria-hidden":"true"}),
+      h("span",{class:"req-head"},h("span",{class:"req-name"},r.name||"Untitled request")),
+      meta,
+      desc?h("div",{class:"req-desc",title:desc},desc):null,
+      msg?h("div",{class:r.state==="failed"?"req-msg":"req-note"},msg):null,
+      r.warning?h("div",{class:"req-warn"},"⚠ "+r.warning):null,
+      actions.childNodes.length?actions:null));}
+  if(shown.length>12)refs.reqs.append(h("button",{type:"button",class:"link",style:"padding:6px 0 0;font-size:13px",onclick:()=>setUi("reqMore",!ui.reqMore)},
+    ui.reqMore?"Show fewer":"Show more ("+Math.min(shown.length,60)+")"));
+  requestAnimationFrame(()=>placeSegs(false));}
+
+boot();
+</script>
+</body>
+</html>

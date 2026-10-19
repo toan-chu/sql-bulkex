@@ -1,0 +1,34 @@
+# How BulkEx recognises each kind of table, whatever the database, schema or table is called.
+# A table belongs to a data set when it has ALL of that data set's signature columns.
+# The month of a table is read from its name: the first 20YY followed by a month (x_y2026_06, i_2025_7, exp202606...).
+datasets:
+  export:
+    label: Export
+    signature: [so_to_khai, ma_so_hang_hoa, ma_nguoi_xuat_khau]
+  import:
+    label: Import
+    signature: [so_to_khai, ma_so_hang_hoa, ma_nguoi_nhap_khau]
+
+# Columns stored as text in the database that really hold numbers. BulkEx reads them as numbers
+# (for "is more than", "between" and totals). Columns the database already stores as numbers need no entry.
+numbers_stored_as_text:
+  - so_luong
+  - so_luong_1
+  - so_luong_container
+  - tong_trong_luong_hang
+  - tong_gia_tri_hoa_don
+  - tong_tri_gia_hoa_don
+  - tong_gia_tri_tinh_thue
+  - tong_tri_gia_tinh_thue
+  - tong_so_tien_thue_xuat_khau
+  - tong_tien_thue_phai_nop
+  - tri_gia_hoa_don
+  - don_gia_hoa_don
+  - tri_gia_tinh_thue_s
+  - tri_gia_tinh_thue_m
+  - don_gia_tinh_thue
+  - so_tien_thue_xuat_khau
+  - so_tien_thue_nhap_khau
+
+# Suggestion lists in the page (country codes, units...) are taken from columns with at most this many different values.
+suggest_max_values: 300

@@ -1,10 +1,6 @@
-jobs.yaml
-.password
-settings.yaml
-connection.yaml
-column.yaml
-log/*
-!log/.gitkeep
+# machine-specific config (template stays tracked)
+config/*
+!config/connection.example.yaml
 __pycache__/
 *.pyc
 exports/
@@ -12,6 +8,7 @@ exports/
 .agents/
 .codex/
 memory/
-AGENTS.md
-handoff/
-docs/*.docx
+handoff/docs/*.docx
+handoff/shots/*.gif
+# retired files waiting for the Chairman to delete them (may contain machine config)
+handoff/archive/
