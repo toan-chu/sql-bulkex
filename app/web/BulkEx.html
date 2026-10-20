@@ -205,6 +205,8 @@ aside{position:sticky;top:20px;display:flex;flex-direction:column;gap:20px}
 .st-bad{color:var(--bad);font-weight:700}
 .req-head{display:flex;align-items:flex-start;gap:6px}
 .req-head .req-name{flex:1}
+.req-x{width:24px;height:24px;font-size:15px;margin-top:-2px;opacity:.55}
+.req:hover .req-x,.req-x:focus-visible{opacity:1}
 .tpl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .tpl select{flex:1;min-width:0}
 details.json{margin-top:12px}
@@ -855,7 +857,10 @@ function renderRequests(){
       mine&&mine.snapshot?h("button",{type:"button",class:"link",title:"Load this request into the form to change and send it again",
         onclick:()=>{if(loadSnapshot(mine.snapshot)){refs.presetName="";renderAll();window.scrollTo({top:0,behavior:"smooth"});toast("Loaded "+(mine.name||"your request")+". Change what you need and send it again.",3500);}}},"Use again"):null);
     refs.reqs.append(h("div",{class:"req"},h("span",{class:"dot "+r.state,"aria-hidden":"true"}),
-      h("span",{class:"req-head"},h("span",{class:"req-name"},r.name||"Untitled request")),
+      h("span",{class:"req-head"},h("span",{class:"req-name"},r.name||"Untitled request"),
+        r.state==="sent"?h("button",{type:"button",class:"x req-x","aria-label":"Forget this request",
+          title:"Forget it: it only exists on this computer and never reached the runner",
+          onclick:()=>{lsSet(LS.sent,lsGet(LS.sent,[]).filter(x=>x.id!==r.id));renderRequests();}},"×"):null),
       meta,
       desc?h("div",{class:"req-desc",title:desc},desc):null,
       msg?h("div",{class:r.state==="failed"?"req-msg":"req-note"},msg):null,
