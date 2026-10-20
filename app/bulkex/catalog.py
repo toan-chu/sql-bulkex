@@ -59,7 +59,10 @@ def build_catalog(found: dict, labels: dict, datasets_def: dict, values: dict | 
             if info is None:  # never skip a column: show its raw name and tell the admin
                 unlabeled.add(col)
                 info = {}
-            f = {"key": col, "label": display_name(info["en"], acr) if info.get("en") else col,
+            en = info.get("en")
+            if isinstance(en, dict):  # same column, different meaning per data set: {export: ..., import: ...}
+                en = en.get(ds) or next(iter(en.values()), None)
+            f = {"key": col, "label": display_name(en, acr) if en else col,
                  "group": info.get("group", "Other"), "type": "number" if types.get(col, "text") != "text" else "text"}
             if info.get("essential"):
                 f["essential"] = True

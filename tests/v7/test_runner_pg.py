@@ -447,3 +447,13 @@ def test_every_detail_row_says_its_year_and_month(runner):
     assert rows[0] == ["Year", "Month", "Declaration Number"]
     by_tk = {r[2]: (r[0], r[1]) for r in rows[1:]}
     assert by_tk["OLD1"] == (2024, 12) and by_tk["TK1"] == (2025, 1)    # from two databases, numbers not text
+
+
+def test_same_column_can_have_a_different_name_per_data_set():
+    from bulkex.catalog import build_catalog
+    tbl = {"db": "d", "schema": "s", "table": "t", "period": "2025-01", "columns": {"ma_nuoc": "text"}}
+    labels = {"fields": {"ma_nuoc": {"en": {"export": "destination_country_code", "import": "shipped_from_country_code"}}}}
+    defs = {"datasets": {"export": {"label": "Export"}, "import": {"label": "Import"}}}
+    cat = build_catalog({"export": [tbl], "import": [tbl]}, labels, defs)
+    names = {ds: cat["datasets"][ds]["fields"][0]["label"] for ds in ("export", "import")}
+    assert names == {"export": "Destination Country Code", "import": "Shipped From Country Code"}

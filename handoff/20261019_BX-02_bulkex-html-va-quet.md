@@ -139,6 +139,10 @@ Get the file bị từ chối khi ổ còn < 5 GB (min_free_gb), Check row count
 Vòng 13 (2026-10-20 16:15, Chairman sau lần export thật đầu tiên từ HAN): dòng Detail không biết thuộc tháng nào.
 Sửa: mọi sheet / CSV Detail có thêm 2 cột đầu Year, Month (số, lấy từ tên bảng). Trang ghi rõ 'Year and Month are always added first'.
 Nút × chỉ cho dòng 'sent' (chỉ có trong trình duyệt, chưa tới runner). 39/39 đạt.
+Vòng 14 (2026-10-20 16:19): 'lọc Country Code VN, IN vẫn ra nước khác'. Mở file kết quả thật: bộ lọc đúng (Country Code chỉ IN/VN);
+nước lạ nằm ở cột Country of Origin Code của Import. Gốc rễ là tên gây nhầm: ma_nuoc là nước bên kia giao dịch, khác nghĩa giữa 2 bảng.
+Sửa (Chairman duyệt): labels.yaml cho phép en theo từng bảng; ma_nuoc = Destination Country Code (Export) / Shipped From Country Code (Import).
+40/40 đạt. Nghĩa của ma_nuoc suy từ dữ liệu, chưa đối chiếu tài liệu hải quan.
 `[RUNTIME CHƯA KIỂM]`: CAI-DAT.bat, Task Scheduler, os.startfile, ghi thẳng thư mục từ trang - chỉ Windows phán được.
 
 ## HISTORY

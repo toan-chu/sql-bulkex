@@ -1,6 +1,7 @@
 # BulkEx field names - Chairman's English names (2026-10-19).
 # key: database column (same on every machine). en: English name; the page shows it in Title Case
 # without underscores (hs -> HS). group: where it sits in the field lists. essential: in the default column set.
+# A column whose meaning differs between Export and Import can take  en: {export: ..., import: ...}
 # Edit freely; the runner re-reads this file on every run.
 group_order: [Goods, Parties, Value, Duty & Tax, Logistics, Declaration]
 acronyms: [hs]
@@ -22,7 +23,7 @@ fields:
   ten_nguoi_nhap_khau: {en: importer_name, group: "Parties", essential: true, default_op: contains}
   so_dien_thoai_nguoi_nhap_khau: {en: importer_phone_number, group: "Parties"}
   ten_nguoi_uy_thac_nhap_khau: {en: entrusted_importer_name, group: "Parties", default_op: contains}
-  ma_nuoc: {en: country_code, group: "Parties", essential: true}
+  ma_nuoc: {en: {export: destination_country_code, import: shipped_from_country_code}, group: "Parties", essential: true}
   tri_gia_hoa_don: {en: invoice_value, group: "Value", essential: true}
   don_gia_hoa_don: {en: invoice_unit_price, group: "Value", essential: true}
   ma_dong_tien_cua_don_gia_hoa_don: {en: invoice_currency_code, group: "Value", essential: true}
