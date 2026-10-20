@@ -124,10 +124,13 @@ def submit(runner, req):
     return next(r for r in Status(runner.s.system_dir).finished() if r["id"] == req["id"])
 
 
-def sheet(runner, rec, name):
+def sheet(runner, rec, name, keep_period=False):
     wb = load_workbook(runner.s.output_dir / rec["files"][0], read_only=True)
     rows = [list(r) for r in wb[name].iter_rows(values_only=True)]
     wb.close()
+    if "Detail" in name and not keep_period:
+        assert rows[0][:2] == ["Year", "Month"]                        # every Detail sheet starts with Year, Month
+        rows = [r[2:] for r in rows]
     return rows
 
 
@@ -435,3 +438,12 @@ def test_export_refused_when_disk_is_almost_full(runner, monkeypatch):
     rec = submit(runner, request([part("export", ["2025-01"])]))
     assert rec["state"] == "failed" and "out of disk space (2.0 GB free)" in rec["message"]
     assert submit(runner, request([part("export", ["2025-01"])], action="count"))["state"] == "done"   # counting needs no disk
+
+
+def test_every_detail_row_says_its_year_and_month(runner):
+    rec = submit(runner, request([part("export", ["2024-12", "2025-01"], columns=("so_to_khai",),
+                                       sort=[{"field": "so_to_khai", "dir": "asc"}])]))
+    rows = sheet(runner, rec, "Detail", keep_period=True)
+    assert rows[0] == ["Year", "Month", "Declaration Number"]
+    by_tk = {r[2]: (r[0], r[1]) for r in rows[1:]}
+    assert by_tk["OLD1"] == (2024, 12) and by_tk["TK1"] == (2025, 1)    # from two databases, numbers not text

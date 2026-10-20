@@ -136,6 +136,9 @@ Vòng 12 (2026-10-20, Chairman: máy HAN hết ổ -> OneDrive không kéo đư�
 vĩnh viễn trên máy. Sửa: chỉ input/ + _system/ + BulkEx.html luôn trên máy; output/ đặt online-only (OneDrive tải lên xong giải phóng ổ);
 Get the file bị từ chối khi ổ còn < 5 GB (min_free_gb), Check row count vẫn chạy. 38/38 đạt; đột biến bỏ chặn ổ -> đỏ.
 `[RUNTIME CHƯA KIỂM]`: attrib -P +U trên output/ thật có giải phóng ổ sau khi tải lên hay không.
+Vòng 13 (2026-10-20 16:15, Chairman sau lần export thật đầu tiên từ HAN): dòng Detail không biết thuộc tháng nào.
+Sửa: mọi sheet / CSV Detail có thêm 2 cột đầu Year, Month (số, lấy từ tên bảng). Trang ghi rõ 'Year and Month are always added first'.
+Nút × chỉ cho dòng 'sent' (chỉ có trong trình duyệt, chưa tới runner). 39/39 đạt.
 `[RUNTIME CHƯA KIỂM]`: CAI-DAT.bat, Task Scheduler, os.startfile, ghi thẳng thư mục từ trang - chỉ Windows phán được.
 
 ## HISTORY

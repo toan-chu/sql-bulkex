@@ -260,14 +260,17 @@ def rows_query(part, tables, types, all_tables=None, with_sort_key=False):
     common = {c: out_type(all_tables or tables, c) for c in cols}
 
     def select_for(t):
-        items = [sql.SQL("{} AS {}").format(out_expr(t, c, common[c]), sql.Identifier(c)) for c in cols]
+        # every row says which year and month it comes from (taken from the table's name)
+        y, m = (int(x) for x in t["period"].split("-"))
+        items = [sql.SQL("{} AS __year, {} AS __month").format(sql.Literal(y), sql.Literal(m))]
+        items += [sql.SQL("{} AS {}").format(out_expr(t, c, common[c]), sql.Identifier(c)) for c in cols]
         if sort:
             key = num_expr(t, sort["field"]) if types[sort["field"]] != "text" else text_expr(t, sort["field"])
             items.append(sql.SQL("{} AS __sort").format(key))
         return sql.SQL(", ").join(items)
 
     union, params = _union(tables, select_for, part["filter"], types)
-    outcols = sql.SQL(", ").join(sql.Identifier(c) for c in cols)
+    outcols = sql.SQL(", ").join([sql.SQL("__year, __month")] + [sql.Identifier(c) for c in cols])
     if rows.get("distinct"):
         extra = sql.SQL(", __sort") if sort else sql.SQL("")
         inner = sql.SQL("SELECT DISTINCT {}{} FROM (").format(outcols, extra) + union + sql.SQL(") u")

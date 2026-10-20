@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6.svg?logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-[![Tests](https://img.shields.io/badge/tests-38%20passed-brightgreen.svg)](tests/v7)
+[![Tests](https://img.shields.io/badge/tests-39%20passed-brightgreen.svg)](tests/v7)
 
 > **Lấy dữ liệu tờ khai xuất nhập khẩu từ PostgreSQL bằng một trang web — không cần biết SQL.**
 > Người dùng mở `BulkEx.html` → chọn tháng, điều kiện lọc, cột → bấm "Get the file" → file Excel (hoặc CSV khi quá lớn) tự xuất hiện trong thư mục chung.

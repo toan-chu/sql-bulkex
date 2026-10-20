@@ -353,7 +353,7 @@ class Runner:
                 tag = f"_{slug(ds_label(ds))}" if two else ""
                 if out.get("rows"):
                     n = counts[ds]
-                    heads = [self.label(ds, c) for c in out["rows"]["columns"]]
+                    heads = ["Year", "Month"] + [self.label(ds, c) for c in out["rows"]["columns"]]
                     files.append(_write_csv(tmp_dir / f"{base}{tag}_detail.csv", heads, self.stream_rows(p, by_db, all_tables)))
                     total += n
                 if out.get("summary"):
@@ -377,7 +377,7 @@ class Runner:
                 months = ", ".join(sorted({t["period"] for t in all_tables}))
                 info.append(_row(info, (f"{ds_label(ds)} months", months)))
                 if out.get("rows"):
-                    heads = [self.label(ds, c) for c in out["rows"]["columns"]]
+                    heads = ["Year", "Month"] + [self.label(ds, c) for c in out["rows"]["columns"]]
                     n = counts[ds]
                     per_sheet = self.s.xlsx_max_rows  # one Excel sheet holds ~1 million rows: bigger results continue on the next sheet
                     sheets = max(1, -(-n // per_sheet))

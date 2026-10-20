@@ -563,7 +563,7 @@ function detailBlock(o,ds){
   for(const [g,fs] of grouped(fields)){const left=fs.filter(f=>!cols.includes(f.key));
     if(left.length)add.append(h("optgroup",{label:g},left.map(f=>{const x=opt(f.key,f.label);x.title=rawTitle(f);return x;})));}
   return h("div",{class:"block"},
-    h("p",{class:"block-title"},"Detail sheet",h("span",{class:"count"},cols.length+" column"+(cols.length===1?"":"s"))),
+    h("p",{class:"block-title"},"Detail sheet",h("span",{class:"count"},cols.length+" column"+(cols.length===1?"":"s")+" · Year and Month are always added first")),
     h("div",{class:"col-tools"},h("span",{class:"lab"},"Start from:"),
       h("button",{type:"button",class:"link",title:"The company's standard set (set by the admin in labels.yaml)",onclick:()=>{o.columns=essentials(ds);renderAll();}},"Essentials"),
       h("button",{type:"button",class:"link",onclick:()=>{o.columns=fields.map(f=>f.key);renderAll();}},"All columns"),
