@@ -132,6 +132,10 @@ Vòng 11 (máy HAN 14:46-14:50, log Chairman gửi): runner chạy đều nhưng
 runner gọi attrib +P (Always keep on this device) cho thư mục chung; setup cũng đặt +P lúc cài; ghi chú quét chỉ ghi log khi thay đổi.
 37/37 đạt; 2 phép đột biến đỏ. Ghi nhận nghiệp vụ: 2025-01..09 có cả vietnam_export và vn_export (runner lấy vietnam_*) - chờ Chairman xác nhận.
 `[RUNTIME CHƯA KIỂM]`: attrib +P trên OneDrive/SharePoint thật ở HAN.
+Vòng 12 (2026-10-20, Chairman: máy HAN hết ổ -> OneDrive không kéo được file về): pin cả thư mục chung là sai vì output/ cũng nằm
+vĩnh viễn trên máy. Sửa: chỉ input/ + _system/ + BulkEx.html luôn trên máy; output/ đặt online-only (OneDrive tải lên xong giải phóng ổ);
+Get the file bị từ chối khi ổ còn < 5 GB (min_free_gb), Check row count vẫn chạy. 38/38 đạt; đột biến bỏ chặn ổ -> đỏ.
+`[RUNTIME CHƯA KIỂM]`: attrib -P +U trên output/ thật có giải phóng ổ sau khi tải lên hay không.
 `[RUNTIME CHƯA KIỂM]`: CAI-DAT.bat, Task Scheduler, os.startfile, ghi thẳng thư mục từ trang - chỉ Windows phán được.
 
 ## HISTORY

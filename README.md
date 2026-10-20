@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6.svg?logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-[![Tests](https://img.shields.io/badge/tests-37%20passed-brightgreen.svg)](tests/v7)
+[![Tests](https://img.shields.io/badge/tests-38%20passed-brightgreen.svg)](tests/v7)
 
 > **Lấy dữ liệu tờ khai xuất nhập khẩu từ PostgreSQL bằng một trang web — không cần biết SQL.**
 > Người dùng mở `BulkEx.html` → chọn tháng, điều kiện lọc, cột → bấm "Get the file" → file Excel (hoặc CSV khi quá lớn) tự xuất hiện trong thư mục chung.
@@ -60,6 +60,7 @@ Chạy lại `CAI-DAT.bat` bất cứ lúc nào để đổi thư mục, đổi 
 | "The database can't be reached" | PostgreSQL chưa chạy; yêu cầu sẽ tự chạy lại khi database lên |
 | Thiếu tháng mới | Bảng tháng đó chưa có, hoặc tên bảng không có năm-tháng (xem `_system/tables.json`) |
 | Yêu cầu nằm mãi ở "waiting", log ghi "Waiting for OneDrive" | Trên máy có database: chuột phải thư mục BulkEx → **Always keep on this device** (setup và runner tự làm việc này; chỉ cần làm tay khi Windows chặn) |
+| "The database computer is almost out of disk space" | Ổ máy có database còn dưới 5 GB trống: dọn ổ rồi gửi lại (ngưỡng `min_free_gb` trong `config/bulkex.yaml`) |
 | Cột hiện tên gốc tiếng Việt | Thêm tên tiếng Anh vào `app/labels.yaml` |
 
 ## 📦 Kết quả lớn cỡ nào thì ra gì
@@ -76,7 +77,7 @@ Các ngưỡng chỉnh trong `config/bulkex.yaml` (`xlsx_max_rows`, `max_rows`, 
 ## 🧹 Dọn dẹp (admin)
 
 - **Recent requests** đọc thẳng từ `_system/done` và `_system/failed`: xoá file ở đó là sau ~2 phút mọi người hết thấy dòng đó.
-- File kết quả trong `output/` không tự xoá: admin xoá tay khi cần.
+- File kết quả trong `output/` không tự xoá: admin xoá tay khi cần. Trên máy có database, `output/` chỉ giữ trên mây (OneDrive tải lên xong là giải phóng ổ); `input/` và `_system/` luôn nằm trên máy.
 
 Nhật ký nằm trong thư mục chung, không nằm trong repo: `_system/log/bulkex.log` (lỗi chi tiết) và `_system/log/requests.csv` (ai lấy gì, lúc nào).
 

@@ -25,7 +25,7 @@ from openpyxl.styles import Font, PatternFill
 from . import query as Q
 from .catalog import build_catalog, load_defs, write_js
 from .config import connect, load_yaml
-from .onedrive import keep_on_device, online_only
+from .onedrive import free_up, keep_workspace, online_only
 from .scan import field_types, scan
 
 log = logging.getLogger("bulkex")
@@ -331,6 +331,11 @@ class Runner:
                     warn.append(f"{lab}: large - the file will need {-(-n // self.s.xlsx_max_rows)} Detail sheets and may take a while.")
             status_rec["warning"] = " ".join(warn)
             return sum(counts.values()), [], msg + (". " + "; ".join(notes) if notes else "")
+        free_gb = shutil.disk_usage(self.s.workspace).free / 1024 ** 3
+        if free_gb < self.s.min_free_gb:
+            log.error("Only %.1f GB free on the database computer; export refused", free_gb)
+            raise Q.RequestError(f"The database computer is almost out of disk space ({free_gb:.1f} GB free). "
+                                 "The admin needs to free some space; then send the request again.")
         for p, _, _ in plan:
             n = counts[p["dataset"]]
             if p["output"].get("rows") and n > self.s.csv_max_rows:
@@ -412,6 +417,7 @@ class Runner:
                 dest = self.s.output_dir / f"{f.stem}_{i}{f.suffix}"
                 i += 1
             shutil.move(str(f), str(dest))
+            free_up(dest)  # OneDrive uploads it, then frees the space on the database computer
             final.append(dest.name)
         return total, final, "; ".join(notes)
 
@@ -436,7 +442,7 @@ class Runner:
         done = 0
         files = self.pending(settle_seconds)
         if any(online_only(f) for f in files):
-            keep_on_device(self.s.workspace)  # ask OneDrive to download them; they are read on a later pass
+            keep_workspace(self.s.workspace)  # ask OneDrive to download them; they are read on a later pass
         for f in files:
             try:
                 if online_only(f):

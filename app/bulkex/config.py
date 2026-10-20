@@ -39,6 +39,7 @@ class Settings:
     csv_max_rows: int = 10_000_000  # hard ceiling: bigger requests are refused
     xlsx_max_rows: int = 1_000_000  # rows per Excel sheet; bigger Detail results continue on the next sheet
     query_timeout_minutes: int = 15
+    min_free_gb: float = 5  # exports are refused when the disk has less free space than this
     databases: list = field(default_factory=list)  # empty = scan every database the user can open
     log_dir: Path | None = None  # default: <workspace>/_system/log - logs live in the shared folder, never in the repo
     app_dir: Path = APP_DIR
@@ -76,6 +77,7 @@ def load_settings(config_dir=None) -> Settings:
         csv_max_rows=int(data.get("csv_max_rows", 10_000_000)),
         xlsx_max_rows=int(data.get("xlsx_max_rows", 1_000_000)),
         query_timeout_minutes=int(data.get("query_timeout_minutes", 15)),
+        min_free_gb=float(data.get("min_free_gb", 5)),
         databases=list(data.get("databases") or []),
         log_dir=data.get("log_dir") or None,
     )

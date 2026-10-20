@@ -391,7 +391,7 @@ def test_online_only_request_waits_instead_of_failing(runner, monkeypatch):
     import bulkex.runner as R
     calls = []
     monkeypatch.setattr(R, "online_only", lambda f: True)              # OneDrive has not downloaded it yet
-    monkeypatch.setattr(R, "keep_on_device", lambda folder: calls.append(folder) or True)
+    monkeypatch.setattr(R, "keep_workspace", lambda folder: calls.append(folder) or True)
     req = request([part("export", ["2025-01"])], rid="cloud1")
     runner.s.ensure_dirs()
     (runner.s.input_dir / "cloud1.json").write_text(json.dumps(req), encoding="utf-8")
@@ -417,9 +417,21 @@ def test_same_scan_notes_are_logged_once(runner, caplog):
     assert first > 0 and len(caplog.records) == first
 
 
-def test_keep_on_device_marks_the_folder_pinned(tmp_path):
-    from bulkex.onedrive import keep_on_device
+def test_keep_workspace_pins_requests_and_frees_results(tmp_path):
+    from bulkex.onedrive import keep_workspace
+    (tmp_path / "output").mkdir()
     seen = []
-    ok = keep_on_device(tmp_path, run=lambda a, **k: seen.append(a) or type("R", (), {"returncode": 0})(), windows=True)
-    assert ok and seen == [["attrib", "+P", "-U", str(tmp_path)], ["attrib", "+P", "-U", str(tmp_path / "*"), "/S", "/D"]]
-    assert keep_on_device(tmp_path, run=lambda *a, **k: 1 / 0, windows=False) is False
+    ok = keep_workspace(tmp_path, run=lambda a, **k: seen.append(a[1:]) or type("R", (), {"returncode": 0})(), windows=True)
+    assert ok
+    assert ["-P", str(tmp_path)] in seen                                 # the folder itself is not pinned
+    assert ["+P", "-U", str(tmp_path / "input" / "*"), "/S", "/D"] in seen
+    assert ["-P", "+U", str(tmp_path / "output" / "*"), "/S", "/D"] in seen
+    assert not [a for a in seen if a[:2] == ["+P", "-U"] and "output" in a[2]]
+
+
+def test_export_refused_when_disk_is_almost_full(runner, monkeypatch):
+    import bulkex.runner as R
+    monkeypatch.setattr(R.shutil, "disk_usage", lambda p: type("U", (), {"free": 2 * 1024 ** 3})())
+    rec = submit(runner, request([part("export", ["2025-01"])]))
+    assert rec["state"] == "failed" and "out of disk space (2.0 GB free)" in rec["message"]
+    assert submit(runner, request([part("export", ["2025-01"])], action="count"))["state"] == "done"   # counting needs no disk
