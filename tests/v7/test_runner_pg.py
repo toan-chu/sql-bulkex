@@ -483,3 +483,22 @@ def test_help_page_gets_vietnamese_names_from_labels(runner):
     runner.refresh_catalog()
     f = {x["key"]: x for x in runner.catalog["datasets"]["export"]["fields"]}
     assert f["ma_so_hang_hoa"]["vi"].startswith("Mã số hàng hóa")
+
+
+def test_too_big_because_a_table_has_no_filters_says_so(runner):
+    runner.s.max_rows, runner.s.csv_max_rows = 1, 2
+    rec = submit(runner, request([part("export", ["2025-01"], [cond("ma_nuoc", "is_any_of", "IN")]), part("import", ["2025-01"])]))
+    assert rec["state"] == "failed"
+    rec = submit(runner, request([part("export", ["2025-01"])]))
+    assert "Export has no filters" in rec["message"]
+
+
+def test_exporter_and_importer_are_marked_as_partners_for_copying():
+    from bulkex.catalog import build_catalog
+    tbl = {"db": "d", "schema": "s", "table": "t", "period": "2025-01",
+           "columns": {"ma_nguoi_xuat_khau": "text", "ma_nguoi_nhap_khau": "text", "ma_so_hang_hoa": "text"}}
+    labels = {"fields": {"ma_nguoi_xuat_khau": {"en": "exporter_code", "swap_with": "ma_nguoi_nhap_khau"}}}
+    cat = build_catalog({"export": [tbl], "import": [tbl]}, labels, {"datasets": {"export": {}, "import": {}}})
+    f = {x["key"]: x for x in cat["datasets"]["import"]["fields"]}
+    assert f["ma_nguoi_xuat_khau"]["swap"] == "ma_nguoi_nhap_khau" and f["ma_nguoi_nhap_khau"]["swap"] == "ma_nguoi_xuat_khau"
+    assert "swap" not in f["ma_so_hang_hoa"]

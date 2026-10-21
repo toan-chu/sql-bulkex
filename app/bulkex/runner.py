@@ -340,8 +340,11 @@ class Runner:
         for p, _, _ in plan:
             n = counts[p["dataset"]]
             if p["output"].get("rows") and n > self.s.csv_max_rows:
-                raise Q.RequestError(f"{ds_label(p['dataset'])}: {n:,} rows is over the {self.s.csv_max_rows:,} limit. "
-                                     "Pick fewer months or add a filter.")
+                lab = ds_label(p["dataset"])
+                hint = (f"{lab} has no filters, so it took every {lab.lower()} record. Add filters on the {lab} tab, "
+                        f"or untick {lab} under Data." if not (p.get("filter") or {}).get("items")
+                        else "Pick fewer months or add a filter.")
+                raise Q.RequestError(f"{lab}: {n:,} rows is over the {self.s.csv_max_rows:,} limit. " + hint)
 
         stamp = dt.datetime.now().strftime("%Y%m%d_%H%M")
         base = f"{stamp}_{slug(req.get('requester'), 20)}_{slug(req.get('name') or req['action'])}"

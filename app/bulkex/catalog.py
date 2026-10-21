@@ -77,6 +77,14 @@ def build_catalog(found: dict, labels: dict, datasets_def: dict, values: dict | 
         fields.sort(key=lambda f: order.get(f["group"], 99))  # stable: keeps column order inside a group
         out["datasets"][ds] = {"label": meta.get("label", ds.capitalize()),
                                "periods": sorted({t["period"] for t in tables}), "fields": fields}
+    swaps = {}
+    for col, info in lab.items():
+        if isinstance(info, dict) and info.get("swap_with"):
+            swaps[col], swaps[info["swap_with"]] = info["swap_with"], col
+    for d in out["datasets"].values():
+        for f in d["fields"]:
+            if f["key"] in swaps:
+                f["swap"] = swaps[f["key"]]
     out["label_report"] = {"unlabeled": sorted(unlabeled), "unused": sorted(set(lab) - seen)}
     return out
 

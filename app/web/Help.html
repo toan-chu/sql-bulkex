@@ -140,7 +140,8 @@ th{background:var(--purple-soft);color:var(--purple-deep);font-family:var(--head
         <li>Bấm <span class="ui">+ Add condition</span> → chọn trường (vd <i>HS Code</i>) → chọn cách so (xem <a href="#cach-so">bảng bên dưới</a>) → gõ giá trị, nhấn <b>Enter</b> sau mỗi giá trị.</li>
         <li>Có sẵn danh sách trong Excel? Copy cả cột rồi <b>dán</b> vào ô giá trị: mỗi ô thành một giá trị.</li>
         <li>Một điều kiện có nhiều giá trị = dòng khớp <b>bất kỳ</b> giá trị nào (VN <i>hoặc</i> IN).</li>
-        <li>Chọn Export + Import thì mỗi bảng có <b>tab bộ lọc riêng</b>; nút <span class="ui">Copy to …</span> chép bộ lọc sang bảng kia.</li>
+        <li>Chọn Export + Import thì mỗi bảng có <b>tab bộ lọc riêng</b>. Tab nào để trống là lấy <b>toàn bộ</b> bảng đó.</li>
+        <li>Nút <span class="ui">Copy to Import</span> / <span class="ui">Copy to Export</span> (cạnh hai tab) chép bộ lọc sang bảng kia. Trường người xuất / nhập khẩu tự đổi vai: <i>Exporter Code</i> ở Export thành <i>Importer Code</i> ở Import (công ty Việt Nam là bên xuất ở Export, bên nhập ở Import). Trường bảng kia không có thì bỏ qua và báo lại.</li>
         <li>Không thêm điều kiện nào = lấy hết mọi dòng của các tháng đã chọn.</li>
       </ul></li>
     <li><b>Result – nhận gì.</b>
@@ -253,6 +254,7 @@ th{background:var(--purple-soft);color:var(--purple-deep);font-family:var(--head
     <tr><td>Nút <b>Get the file</b> mờ</td><td>Thiếu thông tin</td><td>Đọc dòng có chấm cam trong khung tím: thường thiếu <i>Request name</i>, <i>Requested by</i> hoặc chưa chọn tháng</td></tr>
     <tr><td>Nằm mãi ở <b>sent, waiting for the runner</b></td><td>Máy chạy dữ liệu chưa nhận được yêu cầu</td><td>Đợi 5 phút. Vẫn vậy → báo admin (máy có thể đang tắt hoặc OneDrive chưa đồng bộ)</td></tr>
     <tr><td><span class="bad">couldn't run</span> – <i>took longer than 15 minutes</i></td><td>Yêu cầu quá lớn</td><td>Chọn ít tháng hơn, thêm điều kiện, kiểm tra đang để <b>all</b> chứ không phải <b>any</b></td></tr>
+    <tr><td><span class="bad">couldn't run</span> – <i>… rows is over the 10,000,000 limit</i></td><td>Thường do chọn <b>Export + Import</b> nhưng chỉ đặt bộ lọc ở một tab, tab kia lấy toàn bộ dữ liệu</td><td>Mở tab còn lại trong Filters và thêm điều kiện, hoặc ở Data chỉ chọn một bảng. Lưu ý: cùng một công ty ở Export là <i>Exporter Code</i>, ở Import là <i>Importer Code</i></td></tr>
     <tr><td><span class="bad">couldn't run</span> – <i>no data for the chosen months</i></td><td>Tháng đó chưa có dữ liệu</td><td>Chọn tháng khác</td></tr>
     <tr><td>Ra <b>0 rows</b></td><td>Bộ lọc quá chặt hoặc gõ sai</td><td>Mã HS dùng <b>starts with</b>; tên công ty dùng <b>contains</b>; mã nước dùng <b>is</b> với mã 2 chữ</td></tr>
     <tr><td>Lọc nước rồi mà vẫn thấy nước khác</td><td>Đang nhìn nhầm cột</td><td>Import có 2 cột nước: <i>Shipped From Country Code</i> (nước gửi hàng) và <i>Country of Origin Code</i> (nước sản xuất). Xem bảng tra bên dưới</td></tr>

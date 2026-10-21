@@ -3,6 +3,8 @@
 # without underscores (hs -> HS). group: where it sits in the field lists. essential: in the default column set.
 # A column whose meaning differs between Export and Import can take  en: {export: ..., import: ...}
 # vi: Vietnamese name, shown on the Help page (Help.html).
+# swap_with: the column with the same role in the other table. "Copy to Import/Export" moves a condition there
+#   (the Vietnamese company is the exporter in Export and the importer in Import). Works both ways.
 # Edit freely; the runner re-reads this file on every run.
 group_order: [Goods, Parties, Value, Duty & Tax, Logistics, Declaration]
 acronyms: [hs]
@@ -18,8 +20,8 @@ fields:
   don_vi_cua_don_gia_va_so_luong: {vi: "Đơn vị của đơn giá và số lượng", en: unit_price_and_quantity_unit, group: "Goods"}
   ma_nuoc_xuat_xu: {vi: "Mã nước xuất xứ (nơi sản xuất)", en: country_of_origin_code, group: "Goods", essential: true}
   phan_loai_giay_phep_nhap_khau_1: {vi: "Phân loại giấy phép nhập khẩu (1)", en: import_license_type_1, group: "Goods"}
-  ma_nguoi_xuat_khau: {vi: "Mã người xuất khẩu", en: exporter_code, group: "Parties", essential: true, default_op: starts_with}
-  ten_nguoi_xuat_khau: {vi: "Tên người xuất khẩu", en: exporter_name, group: "Parties", essential: true, default_op: contains}
+  ma_nguoi_xuat_khau: {swap_with: ma_nguoi_nhap_khau, vi: "Mã người xuất khẩu", en: exporter_code, group: "Parties", essential: true, default_op: starts_with}
+  ten_nguoi_xuat_khau: {swap_with: ten_nguoi_nhap_khau, vi: "Tên người xuất khẩu", en: exporter_name, group: "Parties", essential: true, default_op: contains}
   ma_nguoi_nhap_khau: {vi: "Mã người nhập khẩu", en: importer_code, group: "Parties", essential: true, default_op: starts_with}
   ten_nguoi_nhap_khau: {vi: "Tên người nhập khẩu", en: importer_name, group: "Parties", essential: true, default_op: contains}
   so_dien_thoai_nguoi_nhap_khau: {vi: "Số điện thoại người nhập khẩu", en: importer_phone_number, group: "Parties"}

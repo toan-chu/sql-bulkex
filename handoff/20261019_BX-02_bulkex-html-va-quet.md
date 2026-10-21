@@ -150,6 +150,12 @@ Vòng 16 (2026-10-21 11:29-11:36): user khó hiểu cách dùng + Summary. READM
 bảng tra 56 trường gốc/English/Việt). Thêm Help.html tiếng Việt (nút 'Hướng dẫn' trên trang; bảng tra đọc catalog, có tìm kiếm không dấu);
 labels.yaml thêm vi. Runner tự chép BulkEx.html + Help.html mới ra thư mục chung mỗi lượt -> cập nhật chỉ cần Pull. 43/43 đạt.
 Tên tiếng Việt do Claude viết từ tên cột - chờ Chairman rà (nhất là nhóm thuế, vận đơn).
+Vòng 17 (2026-10-21 15:39): DSH1/DSH2 của Sam bị từ chối 131.307.517 dòng Import. Nguyên nhân: chọn Export + Import, chỉ lọc tab Export
+(Exporter Code starts with 2700622899), tab Import trống -> lấy toàn bộ 19 tháng. Cải tiến: khung gửi hiện cảnh báo cam khi một bảng
+không có bộ lọc mà bảng kia có; thông báo từ chối nói rõ bảng nào không có bộ lọc; Help + README thêm dòng hỏi đáp. 44/44 đạt.
+Vòng 18 (2026-10-21 15:48): Chairman xin copy điều kiện giữa Export và Import. Nút Copy to … đã có nhưng chép nguyên tên trường -> sai vai
+(Exporter ở Import là công ty nước ngoài). Sửa: labels.yaml swap_with (mã + tên người xuất <-> nhập khẩu); copy tự đổi vai, báo trường
+đã đổi và trường bị bỏ qua. 45/45 đạt; thử trình duyệt: Exporter Code 2700622899 -> Importer Code.
 `[RUNTIME CHƯA KIỂM]`: CAI-DAT.bat, Task Scheduler, os.startfile, ghi thẳng thư mục từ trang - chỉ Windows phán được.
 
 ## HISTORY

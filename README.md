@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6.svg?logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-[![Tests](https://img.shields.io/badge/tests-43%20passed-brightgreen.svg)](tests/v7)
+[![Tests](https://img.shields.io/badge/tests-45%20passed-brightgreen.svg)](tests/v7)
 
 > **Lấy dữ liệu tờ khai xuất nhập khẩu bằng một trang web, không cần biết SQL.**
 > Mở `BulkEx.html` → chọn tháng, điều kiện, cột → bấm **Get the file** → vài phút sau có file Excel trong thư mục chung.
@@ -51,7 +51,7 @@
 - Bấm **+ Add condition** → chọn trường (ví dụ *HS Code*) → chọn cách so → gõ giá trị, **Enter** sau mỗi giá trị.
 - Có sẵn danh sách trong Excel? Copy cả cột rồi **dán** vào ô giá trị — mỗi ô thành một giá trị.
 - Một điều kiện có nhiều giá trị = dòng khớp **bất kỳ** giá trị nào (VN *hoặc* IN).
-- Chọn bảng Export + Import thì mỗi bảng có **tab bộ lọc riêng**; nút **Copy to …** chép bộ lọc sang bảng kia.
+- Chọn bảng Export + Import thì mỗi bảng có **tab bộ lọc riêng** (tab để trống = lấy toàn bộ bảng đó). Nút **Copy to Import / Copy to Export** chép bộ lọc sang bảng kia; trường người xuất / nhập khẩu tự đổi vai (*Exporter Code* ở Export → *Importer Code* ở Import, vì công ty Việt Nam là bên xuất ở Export, bên nhập ở Import).
 
 Cách so (chọn trong ô thứ hai):
 
@@ -218,6 +218,7 @@ Một số trường chỉ có ở Export hoặc chỉ có ở Import (ví dụ 
 | Ra **0 rows** | Bộ lọc quá chặt hoặc gõ sai | Mã HS nên dùng **starts with**; tên công ty nên dùng **contains**; mã nước dùng **is** với mã 2 chữ (`IN`, `VN`, `CN`) |
 | Ra cả nước khác dù đã lọc nước | Đang nhìn nhầm cột | Import có 2 cột nước: *Shipped From Country Code* (nước gửi hàng) và *Country of Origin Code* (nước sản xuất). Xem bảng tra bên dưới |
 | Nhận file **CSV** thay vì Excel | Kết quả trên 3 triệu dòng | CSV mở bằng Excel bình thường. Muốn Excel thì lọc hẹp lại |
+| **couldn't run** – *… rows is over the 10,000,000 limit* | Thường do chọn **Export + Import** nhưng chỉ lọc ở một tab, tab kia lấy toàn bộ | Thêm điều kiện ở tab còn lại, hoặc chỉ chọn một bảng. Cùng một công ty: Export là *Exporter Code*, Import là *Importer Code* |
 | Thấy yêu cầu của người khác | Danh sách dùng chung cả nhóm | Bấm **Only mine** |
 
 ---
@@ -290,7 +291,7 @@ Các ngưỡng chỉnh trong `config/bulkex.yaml` (`xlsx_max_rows`, `max_rows`, 
 
 ### Đổi tên trường
 
-Tên trên trang lấy từ `app/labels.yaml`: `en` là tên tiếng Anh (viết thường, gạch dưới), `vi` là tên tiếng Việt hiện ở trang Help, `group` là nhóm, `essential: true` đưa vào bộ Essentials, `default_op` là cách so mặc định. Trường có nghĩa khác nhau giữa hai bảng ghi `en: {export: ..., import: ...}`. Sửa xong thì cập nhật luôn bảng tra trong README này.
+Tên trên trang lấy từ `app/labels.yaml`: `en` là tên tiếng Anh (viết thường, gạch dưới), `vi` là tên tiếng Việt hiện ở trang Help, `swap_with` là trường cùng vai ở bảng kia (dùng khi Copy to Import/Export), `group` là nhóm, `essential: true` đưa vào bộ Essentials, `default_op` là cách so mặc định. Trường có nghĩa khác nhau giữa hai bảng ghi `en: {export: ..., import: ...}`. Sửa xong thì cập nhật luôn bảng tra trong README này.
 
 ### Cấu trúc
 

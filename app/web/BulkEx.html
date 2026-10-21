@@ -184,6 +184,8 @@ aside{position:sticky;top:20px;display:flex;flex-direction:column;gap:20px}
 .ask input::placeholder{color:#a58bc9}
 .problems{margin:12px 0 0;padding:10px 12px;background:#3a1466;border-radius:var(--r-s);font-size:13.5px;list-style:none}
 .problems li::before{content:"• ";color:#ffb38a}
+.cautions{margin:12px 0 0;padding:10px 12px;background:#fff0e6;color:#7a3200;border-radius:var(--r-s);font-size:13.5px;font-weight:600;list-style:none}
+.cautions li+li{margin-top:6px}
 .dest{font-size:12.5px;color:#cbb7ea;margin-top:12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .dest .link{color:#fff;font-size:12.5px;padding:0}
 .dest.todo{background:#3a1466;border-radius:var(--r-s);padding:10px 12px;display:block;line-height:1.5}
@@ -442,7 +444,7 @@ function drawFilterHead(){
   if(!refs.fhead||!tabsOn())return;const ds=fDs();const other=ds==="export"?"import":"export";
   refs.fhead.textContent="";
   refs.fhead.append(seg("ftab","Filters for",tabItems("f"),ds,k=>{S.fTab=k;renderAll();}),
-    filterKeys(ds).length?h("button",{type:"button",class:"link",title:"Copy these conditions to the "+dsLabel(other)+" filters, skipping fields "+dsLabel(other)+" doesn't have",
+    filterKeys(ds).length?h("button",{type:"button",class:"link",title:"Copy these conditions to the "+dsLabel(other)+" filters. Exporter and Importer fields switch over, because the Vietnamese company is the exporter in Export and the importer in Import.",
       onclick:()=>copyFilters(ds,other)},"Copy to "+dsLabel(other)):null);}
 function drawFilters(){refs.filters.textContent="";refs.filters.append(groupView(S.filters[fDs()],true,fDs()));}
 function filtersChanged(){drawFilters();drawFilterHead();refreshResultCols();updateAsk();}
@@ -451,15 +453,23 @@ function refreshResultCols(){
   if(!refs.result)return;const old=refs.result;old.replaceWith(stepOutput());
   placeSegs(false);}
 function copyFilters(from,to){
-  const keys=new Set(fieldsOf(to).map(f=>f.key));let skipped=0;
-  const clone=g=>({kind:"group",id:nid(),match:g.match,items:g.items.map(it=>it.kind==="group"?clone(it):
-    (it.field&&!keys.has(it.field)?(skipped++,null):Object.assign(JSON.parse(JSON.stringify(it)),{id:nid()}))).filter(Boolean).filter(it=>it.kind!=="group"||it.items.length)});
+  /* a field with a "swap" partner (Exporter <-> Importer) plays the other role in the other table: move the condition there */
+  const keys=new Set(fieldsOf(to).map(f=>f.key));const skipped=[],moved=[];
+  const where=it=>{const f=fieldOf(it.field,from);const sw=f&&f.swap;
+    if(sw&&keys.has(sw)){moved.push(f.label+" → "+fieldOf(sw,to).label);return sw;}
+    return keys.has(it.field)?it.field:null;};
+  const one=it=>{if(!it.field)return null;const k=where(it);
+    if(!k){skipped.push((fieldOf(it.field,from)||{}).label||it.field);return null;}
+    return Object.assign(JSON.parse(JSON.stringify(it)),{id:nid(),field:k});};
+  const clone=g=>({kind:"group",id:nid(),match:g.match,items:g.items.map(it=>it.kind==="group"?clone(it):one(it))
+    .filter(Boolean).filter(it=>it.kind!=="group"||it.items.length)});
   const add=clone(S.filters[from]);
   const target=S.filters[to];
   if(target.items.length&&!confirm(dsLabel(to)+" already has filters. Add these to them? (Cancel replaces them.)"))target.items=[];
   target.items.push(...add.items);
   S.fTab=to;renderAll();
-  toast("Copied to "+dsLabel(to)+(skipped?" — "+skipped+" condition"+(skipped>1?"s were":" was")+" skipped because "+dsLabel(to)+" has no such field.":"."),4500);}
+  toast("Copied to "+dsLabel(to)+"."+(moved.length?" Switched to the matching role: "+moved.join(", ")+".":"")+
+    (skipped.length?" Skipped ("+dsLabel(to)+" has no such field): "+skipped.join(", ")+".":""),7000);}
 function fieldSelect(c,ds){
   const sel=h("select",{"aria-label":"Field",onchange:e=>{c.field=e.target.value;const f=fieldOf(c.field,ds);
     c.op=defaultOp(f);c.values=[];c.v1=c.v2=c.n="";filtersChanged();focusVal(c.id);}});
@@ -639,6 +649,14 @@ function partSentence(ds,onlySummary){
     if(o.sums.length)frag.append(" with total ",h("span",{class:"v"},listText(o.sums.map(k=>(fieldOf(k,ds)||{}).label||k),"and")));
     if(+o.top>0)frag.append(", top ",h("span",{class:"v"},String(+o.top)));}
   return frag;}
+/* not blocking, but almost always a mistake: one table filtered, the other taking everything */
+function cautions(){
+  const c=[];const list=sets();if(list.length<2)return c;
+  const has=ds=>filterKeys(ds).length>0;
+  for(const ds of list)if(!has(ds)&&list.some(o=>o!==ds&&has(o)))
+    c.push(dsLabel(ds)+" has no filters, so it takes every "+dsLabel(ds).toLowerCase()+" record in the chosen months (often millions of rows). "+
+      "Add filters on the "+dsLabel(ds)+" tab, or pick only "+list.filter(o=>o!==ds).map(dsLabel).join(" + ")+" under Data.");
+  return c;}
 function problems(){
   const p=[];const pre=ds=>tabsOn()?dsLabel(ds)+": ":"";
   for(const ds of sets()){
@@ -657,6 +675,7 @@ function problems(){
 function askPanel(){
   refs.sentence=h("p",{class:"sentence"});
   refs.problems=h("ul",{class:"problems",hidden:true});
+  refs.cautions=h("ul",{class:"cautions",hidden:true});
   refs.json=h("pre",{});
   refs.dest=h("div",{class:"dest"});
   refs.countBtn=h("button",{type:"button",class:"btn btn-ghost",style:"color:#fff;border-color:#7a52b0",
@@ -668,7 +687,7 @@ function askPanel(){
       h("input",{type:"text",id:"reqName",placeholder:"Required, e.g. laptops HS 8471",value:S.name,oninput:e=>{S.name=e.target.value;updateAsk();}})),
     h("div",{style:"margin-top:10px"},h("label",{class:"lab",for:"reqWho"},"Requested by"),
       h("input",{type:"text",id:"reqWho",placeholder:"Required, your name",value:lsGet(LS.name,""),oninput:e=>{lsSet(LS.name,e.target.value.trim());updateAsk();}})),
-    refs.problems,
+    refs.problems,refs.cautions,
     h("div",{class:"row",style:"margin-top:16px"},refs.countBtn,refs.exportBtn),
     h("p",{class:"ask-help"},h("b",{},"Check row count")," tells you how many rows match in about a minute, without making a file — handy before a big pull. ",
       h("b",{},"Get the file")," makes the file — Excel, or CSV when it is over 3 million rows."),
@@ -686,6 +705,7 @@ function updateAsk(){
   const p=problems();
   refs.problems.textContent="";refs.problems.hidden=!p.length;p.forEach(x=>refs.problems.append(h("li",{},x)));
   refs.countBtn.disabled=refs.exportBtn.disabled=p.length>0;
+  const cw=cautions();refs.cautions.textContent="";refs.cautions.hidden=!cw.length;cw.forEach(x=>refs.cautions.append(h("li",{},"⚠ "+x)));
   refs.json.textContent=JSON.stringify(buildRequest("export",true),null,2);
   remember();}
 
