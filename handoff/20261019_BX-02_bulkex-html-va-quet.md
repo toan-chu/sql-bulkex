@@ -146,6 +146,10 @@ Sửa (Chairman duyệt): labels.yaml cho phép en theo từng bảng; ma_nuoc =
 Vòng 15 (2026-10-21): 2 yêu cầu VN-IN Pharma fail do quá 15 phút. Nguyên nhân: bảng Export đổi bộ lọc từ 'all' sang 'any' -> 3 năm
 mọi lô đi máy bay + mọi lô đi Ấn Độ. Không phải lỗi code. Cải tiến: trang hiện cảnh báo cam khi chọn 'any' (chữ 'or' cũng màu cam);
 thông báo hết giờ nói rõ bộ lọc đang 'any' và gợi ý Check row count. 41/41 đạt.
+Vòng 16 (2026-10-21 11:29-11:36): user khó hiểu cách dùng + Summary. README viết lại (hướng dẫn 6 bước, all/any, Detail vs Summary,
+bảng tra 56 trường gốc/English/Việt). Thêm Help.html tiếng Việt (nút 'Hướng dẫn' trên trang; bảng tra đọc catalog, có tìm kiếm không dấu);
+labels.yaml thêm vi. Runner tự chép BulkEx.html + Help.html mới ra thư mục chung mỗi lượt -> cập nhật chỉ cần Pull. 43/43 đạt.
+Tên tiếng Việt do Claude viết từ tên cột - chờ Chairman rà (nhất là nhóm thuế, vận đơn).
 `[RUNTIME CHƯA KIỂM]`: CAI-DAT.bat, Task Scheduler, os.startfile, ghi thẳng thư mục từ trang - chỉ Windows phán được.
 
 ## HISTORY

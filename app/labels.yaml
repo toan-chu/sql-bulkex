@@ -2,63 +2,64 @@
 # key: database column (same on every machine). en: English name; the page shows it in Title Case
 # without underscores (hs -> HS). group: where it sits in the field lists. essential: in the default column set.
 # A column whose meaning differs between Export and Import can take  en: {export: ..., import: ...}
+# vi: Vietnamese name, shown on the Help page (Help.html).
 # Edit freely; the runner re-reads this file on every run.
 group_order: [Goods, Parties, Value, Duty & Tax, Logistics, Declaration]
 acronyms: [hs]
 fields:
-  so_to_khai: {en: declaration_number, group: "Declaration"}
-  ma_chi_cuc_hai_quan_tao_moi: {en: customs_sub_department_code, group: "Declaration"}
-  ma_loai_hinh: {en: declaration_type_code, group: "Declaration"}
-  phan_ghi_chu: {en: remarks, group: "Declaration", default_op: contains}
-  ma_so_hang_hoa: {en: hs_code, group: "Goods", essential: true, default_op: starts_with}
-  mo_ta_hang_hoa: {en: goods_description, group: "Goods", essential: true, default_op: contains}
-  so_luong_1: {en: quantity_1, group: "Goods", essential: true}
-  ma_don_vi_tinh_1: {en: unit_code_1, group: "Goods", essential: true}
-  don_vi_cua_don_gia_va_so_luong: {en: unit_price_and_quantity_unit, group: "Goods"}
-  ma_nuoc_xuat_xu: {en: country_of_origin_code, group: "Goods", essential: true}
-  phan_loai_giay_phep_nhap_khau_1: {en: import_license_type_1, group: "Goods"}
-  ma_nguoi_xuat_khau: {en: exporter_code, group: "Parties", essential: true, default_op: starts_with}
-  ten_nguoi_xuat_khau: {en: exporter_name, group: "Parties", essential: true, default_op: contains}
-  ma_nguoi_nhap_khau: {en: importer_code, group: "Parties", essential: true, default_op: starts_with}
-  ten_nguoi_nhap_khau: {en: importer_name, group: "Parties", essential: true, default_op: contains}
-  so_dien_thoai_nguoi_nhap_khau: {en: importer_phone_number, group: "Parties"}
-  ten_nguoi_uy_thac_nhap_khau: {en: entrusted_importer_name, group: "Parties", default_op: contains}
-  ma_nuoc: {en: {export: destination_country_code, import: shipped_from_country_code}, group: "Parties", essential: true}
-  tri_gia_hoa_don: {en: invoice_value, group: "Value", essential: true}
-  don_gia_hoa_don: {en: invoice_unit_price, group: "Value", essential: true}
-  ma_dong_tien_cua_don_gia_hoa_don: {en: invoice_currency_code, group: "Value", essential: true}
-  ma_dong_tien_cua_don_gia: {en: unit_price_currency_code, group: "Value", essential: true}
-  tong_gia_tri_hoa_don: {en: total_invoice_value, group: "Value"}
-  tong_tri_gia_hoa_don: {en: total_invoice_value, group: "Value"}
-  phuong_thuc_thanh_toan: {en: payment_method, group: "Value"}
-  tri_gia_tinh_thue_s: {en: taxable_value_s, group: "Duty & Tax"}
-  tri_gia_tinh_thue_m: {en: taxable_value_m, group: "Duty & Tax"}
-  don_gia_tinh_thue: {en: taxable_unit_price, group: "Duty & Tax"}
-  tong_gia_tri_tinh_thue: {en: total_taxable_value, group: "Duty & Tax"}
-  tong_tri_gia_tinh_thue: {en: total_taxable_value, group: "Duty & Tax"}
-  thue_suat_thue_xuat_khau: {en: export_duty_rate, group: "Duty & Tax"}
-  thue_suat_thue_nhap_khau: {en: import_duty_rate, group: "Duty & Tax"}
-  phan_loai_nhap_thue_suat_thue_xuat_khau: {en: export_duty_rate_input_type, group: "Duty & Tax"}
-  so_tien_thue_xuat_khau: {en: export_duty_amount, group: "Duty & Tax"}
-  so_tien_thue_nhap_khau: {en: import_duty_amount, group: "Duty & Tax"}
-  tong_so_tien_thue_xuat_khau: {en: total_export_duty_amount, group: "Duty & Tax"}
-  tong_tien_thue_phai_nop: {en: total_tax_payable, group: "Duty & Tax"}
-  ma_mien_giam_khong_chiu_thue_xuat_khau: {en: export_duty_exemption_reduction_code, group: "Duty & Tax"}
-  ma_mien_giam_khong_chiu_thue_nhap_khau: {en: import_duty_exemption_reduction_code, group: "Duty & Tax"}
-  ma_bieu_thue_nhap_khau: {en: import_tariff_code, group: "Duty & Tax"}
-  phuong_thuc_van_chuyen: {en: transport_mode, group: "Logistics"}
-  so_van_don: {en: bill_of_lading_number, group: "Logistics"}
-  so_van_don_1: {en: bill_of_lading_number_1, group: "Logistics"}
-  so_van_don_2: {en: bill_of_lading_number_2, group: "Logistics"}
-  so_van_don_3: {en: bill_of_lading_number_3, group: "Logistics"}
-  so_van_don_4: {en: bill_of_lading_number_4, group: "Logistics"}
-  so_van_don_5: {en: bill_of_lading_number_5, group: "Logistics"}
-  so_luong: {en: quantity, group: "Logistics"}
-  ma_don_vi_tinh: {en: package_type, group: "Logistics"}
-  tong_trong_luong_hang: {en: total_gross_weight, group: "Logistics", essential: true}
-  ma_don_vi_tinh_trong_luong: {en: weight_unit, group: "Logistics"}
-  so_luong_container: {en: container_count, group: "Logistics"}
-  ma_dia_diem_xep_hang: {en: loading_location_code, group: "Logistics"}
-  ma_dia_diem_do_hang: {en: unloading_location_code, group: "Logistics"}
-  ma_dia_diem_nhan_hang_cuoi_cung: {en: final_destination_code, group: "Logistics"}
-  ten_phuong_tien_van_chuyen: {en: transport_vehicle_name, group: "Logistics", default_op: contains}
+  so_to_khai: {vi: "Số tờ khai", en: declaration_number, group: "Declaration"}
+  ma_chi_cuc_hai_quan_tao_moi: {vi: "Mã chi cục hải quan tạo mới", en: customs_sub_department_code, group: "Declaration"}
+  ma_loai_hinh: {vi: "Mã loại hình", en: declaration_type_code, group: "Declaration"}
+  phan_ghi_chu: {vi: "Phần ghi chú", en: remarks, group: "Declaration", default_op: contains}
+  ma_so_hang_hoa: {vi: "Mã số hàng hóa (mã HS)", en: hs_code, group: "Goods", essential: true, default_op: starts_with}
+  mo_ta_hang_hoa: {vi: "Mô tả hàng hóa", en: goods_description, group: "Goods", essential: true, default_op: contains}
+  so_luong_1: {vi: "Số lượng (1)", en: quantity_1, group: "Goods", essential: true}
+  ma_don_vi_tinh_1: {vi: "Mã đơn vị tính (1)", en: unit_code_1, group: "Goods", essential: true}
+  don_vi_cua_don_gia_va_so_luong: {vi: "Đơn vị của đơn giá và số lượng", en: unit_price_and_quantity_unit, group: "Goods"}
+  ma_nuoc_xuat_xu: {vi: "Mã nước xuất xứ (nơi sản xuất)", en: country_of_origin_code, group: "Goods", essential: true}
+  phan_loai_giay_phep_nhap_khau_1: {vi: "Phân loại giấy phép nhập khẩu (1)", en: import_license_type_1, group: "Goods"}
+  ma_nguoi_xuat_khau: {vi: "Mã người xuất khẩu", en: exporter_code, group: "Parties", essential: true, default_op: starts_with}
+  ten_nguoi_xuat_khau: {vi: "Tên người xuất khẩu", en: exporter_name, group: "Parties", essential: true, default_op: contains}
+  ma_nguoi_nhap_khau: {vi: "Mã người nhập khẩu", en: importer_code, group: "Parties", essential: true, default_op: starts_with}
+  ten_nguoi_nhap_khau: {vi: "Tên người nhập khẩu", en: importer_name, group: "Parties", essential: true, default_op: contains}
+  so_dien_thoai_nguoi_nhap_khau: {vi: "Số điện thoại người nhập khẩu", en: importer_phone_number, group: "Parties"}
+  ten_nguoi_uy_thac_nhap_khau: {vi: "Tên người ủy thác nhập khẩu", en: entrusted_importer_name, group: "Parties", default_op: contains}
+  ma_nuoc: {vi: "Mã nước bên kia giao dịch — Export: nước hàng đến; Import: nước hàng gửi từ", en: {export: destination_country_code, import: shipped_from_country_code}, group: "Parties", essential: true}
+  tri_gia_hoa_don: {vi: "Trị giá hóa đơn", en: invoice_value, group: "Value", essential: true}
+  don_gia_hoa_don: {vi: "Đơn giá hóa đơn", en: invoice_unit_price, group: "Value", essential: true}
+  ma_dong_tien_cua_don_gia_hoa_don: {vi: "Mã đồng tiền của đơn giá hóa đơn", en: invoice_currency_code, group: "Value", essential: true}
+  ma_dong_tien_cua_don_gia: {vi: "Mã đồng tiền của đơn giá", en: unit_price_currency_code, group: "Value", essential: true}
+  tong_gia_tri_hoa_don: {vi: "Tổng giá trị hóa đơn", en: total_invoice_value, group: "Value"}
+  tong_tri_gia_hoa_don: {vi: "Tổng trị giá hóa đơn", en: total_invoice_value, group: "Value"}
+  phuong_thuc_thanh_toan: {vi: "Phương thức thanh toán", en: payment_method, group: "Value"}
+  tri_gia_tinh_thue_s: {vi: "Trị giá tính thuế (S)", en: taxable_value_s, group: "Duty & Tax"}
+  tri_gia_tinh_thue_m: {vi: "Trị giá tính thuế (M)", en: taxable_value_m, group: "Duty & Tax"}
+  don_gia_tinh_thue: {vi: "Đơn giá tính thuế", en: taxable_unit_price, group: "Duty & Tax"}
+  tong_gia_tri_tinh_thue: {vi: "Tổng giá trị tính thuế", en: total_taxable_value, group: "Duty & Tax"}
+  tong_tri_gia_tinh_thue: {vi: "Tổng trị giá tính thuế", en: total_taxable_value, group: "Duty & Tax"}
+  thue_suat_thue_xuat_khau: {vi: "Thuế suất thuế xuất khẩu", en: export_duty_rate, group: "Duty & Tax"}
+  thue_suat_thue_nhap_khau: {vi: "Thuế suất thuế nhập khẩu", en: import_duty_rate, group: "Duty & Tax"}
+  phan_loai_nhap_thue_suat_thue_xuat_khau: {vi: "Phân loại nhập thuế suất thuế xuất khẩu", en: export_duty_rate_input_type, group: "Duty & Tax"}
+  so_tien_thue_xuat_khau: {vi: "Số tiền thuế xuất khẩu", en: export_duty_amount, group: "Duty & Tax"}
+  so_tien_thue_nhap_khau: {vi: "Số tiền thuế nhập khẩu", en: import_duty_amount, group: "Duty & Tax"}
+  tong_so_tien_thue_xuat_khau: {vi: "Tổng số tiền thuế xuất khẩu", en: total_export_duty_amount, group: "Duty & Tax"}
+  tong_tien_thue_phai_nop: {vi: "Tổng tiền thuế phải nộp", en: total_tax_payable, group: "Duty & Tax"}
+  ma_mien_giam_khong_chiu_thue_xuat_khau: {vi: "Mã miễn / giảm / không chịu thuế xuất khẩu", en: export_duty_exemption_reduction_code, group: "Duty & Tax"}
+  ma_mien_giam_khong_chiu_thue_nhap_khau: {vi: "Mã miễn / giảm / không chịu thuế nhập khẩu", en: import_duty_exemption_reduction_code, group: "Duty & Tax"}
+  ma_bieu_thue_nhap_khau: {vi: "Mã biểu thuế nhập khẩu", en: import_tariff_code, group: "Duty & Tax"}
+  phuong_thuc_van_chuyen: {vi: "Phương thức vận chuyển", en: transport_mode, group: "Logistics"}
+  so_van_don: {vi: "Số vận đơn", en: bill_of_lading_number, group: "Logistics"}
+  so_van_don_1: {vi: "Số vận đơn (1)", en: bill_of_lading_number_1, group: "Logistics"}
+  so_van_don_2: {vi: "Số vận đơn (2)", en: bill_of_lading_number_2, group: "Logistics"}
+  so_van_don_3: {vi: "Số vận đơn (3)", en: bill_of_lading_number_3, group: "Logistics"}
+  so_van_don_4: {vi: "Số vận đơn (4)", en: bill_of_lading_number_4, group: "Logistics"}
+  so_van_don_5: {vi: "Số vận đơn (5)", en: bill_of_lading_number_5, group: "Logistics"}
+  so_luong: {vi: "Số lượng kiện", en: quantity, group: "Logistics"}
+  ma_don_vi_tinh: {vi: "Mã đơn vị tính (loại kiện)", en: package_type, group: "Logistics"}
+  tong_trong_luong_hang: {vi: "Tổng trọng lượng hàng (gross)", en: total_gross_weight, group: "Logistics", essential: true}
+  ma_don_vi_tinh_trong_luong: {vi: "Mã đơn vị tính trọng lượng", en: weight_unit, group: "Logistics"}
+  so_luong_container: {vi: "Số lượng container", en: container_count, group: "Logistics"}
+  ma_dia_diem_xep_hang: {vi: "Mã địa điểm xếp hàng", en: loading_location_code, group: "Logistics"}
+  ma_dia_diem_do_hang: {vi: "Mã địa điểm dỡ hàng", en: unloading_location_code, group: "Logistics"}
+  ma_dia_diem_nhan_hang_cuoi_cung: {vi: "Mã địa điểm nhận hàng cuối cùng", en: final_destination_code, group: "Logistics"}
+  ten_phuong_tien_van_chuyen: {vi: "Tên phương tiện vận chuyển", en: transport_vehicle_name, group: "Logistics", default_op: contains}

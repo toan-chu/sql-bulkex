@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BulkEx – Hướng dẫn</title>
+<!-- BulkEx v7 help page (Vietnamese). Field table is read from _system/catalog.js written by the runner. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --purple:#4d148c; --purple-deep:#2b0a52; --purple-soft:#efe8f8; --purple-line:#d9cbee;
+  --orange:#ff6200; --orange-soft:#fff0e6; --amber:#b45309;
+  --paper:#ffffff; --mist:#f7f4fb; --ink:#241536; --muted:#6c6280;
+  --ok:#17804f; --bad:#c2301a; --r-s:8px; --r-m:14px;
+  --head:"Montserrat",system-ui,sans-serif; --body:"Quicksand",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+html,body{margin:0}
+body{background:var(--mist);color:var(--ink);font-family:var(--body);font-weight:500;font-size:15.5px;line-height:1.6}
+:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
+.bar{background:var(--purple);color:#fff;position:sticky;top:0;z-index:5}
+.bar-in{max-width:1180px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:16px}
+.mark{font-family:var(--head);font-weight:700;font-size:22px}
+.mark b{color:var(--orange)}
+.bar a{color:#fff;font-weight:700;text-decoration:none;margin-left:auto;border:1.5px solid rgba(255,255,255,.5);border-radius:999px;padding:6px 16px;font-size:14px}
+.bar a:hover{background:rgba(255,255,255,.12)}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 24px 64px;display:grid;grid-template-columns:230px minmax(0,1fr);gap:32px;align-items:start}
+@media (max-width:900px){.wrap{grid-template-columns:1fr;padding:20px 16px 48px}nav.toc{position:static!important}}
+nav.toc{position:sticky;top:84px;background:var(--paper);border-radius:var(--r-m);padding:16px 18px;box-shadow:0 1px 0 var(--purple-line)}
+nav.toc p{margin:0 0 8px;font-family:var(--head);font-weight:700;color:var(--purple-deep);font-size:14px}
+nav.toc a{display:block;color:var(--ink);text-decoration:none;padding:5px 0;font-size:14.5px;font-weight:600}
+nav.toc a:hover{color:var(--orange)}
+main{display:flex;flex-direction:column;gap:24px;min-width:0}
+section{background:var(--paper);border-radius:var(--r-m);padding:24px 28px;box-shadow:0 1px 0 var(--purple-line);scroll-margin-top:84px}
+h1{font-family:var(--head);font-size:26px;color:var(--purple-deep);margin:0 0 6px}
+h2{font-family:var(--head);font-size:20px;color:var(--purple-deep);margin:0 0 12px}
+h3{font-family:var(--head);font-size:16px;color:var(--purple);margin:22px 0 8px}
+p{margin:8px 0}
+.lead{color:var(--muted);font-size:16px;margin:0}
+ul,ol{margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+b.ui,span.ui{background:var(--purple-soft);color:var(--purple);border-radius:6px;padding:1px 7px;font-weight:700;white-space:nowrap}
+.btn-like{background:var(--orange);color:#fff;border-radius:999px;padding:1px 10px;font-weight:700;white-space:nowrap}
+code{background:#f3eefa;border-radius:5px;padding:1px 6px;font-size:14px;font-family:Consolas,monospace}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--purple-line);vertical-align:top}
+th{background:var(--purple-soft);color:var(--purple-deep);font-family:var(--head);font-size:13px;font-weight:700}
+.tbl{overflow-x:auto}
+.ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}
+.warn{background:var(--orange-soft);border-left:4px solid var(--orange);border-radius:var(--r-s);padding:12px 16px;margin:14px 0}
+.warn b{color:#7a3200}
+.tip{background:var(--purple-soft);border-left:4px solid var(--purple);border-radius:var(--r-s);padding:12px 16px;margin:14px 0}
+.steps{counter-reset:s;list-style:none;padding:0}
+.steps>li{counter-increment:s;position:relative;padding:4px 0 10px 48px;margin:0}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:2px;width:32px;height:32px;border-radius:50%;background:var(--purple);color:#fff;
+  font-family:var(--head);font-weight:700;display:flex;align-items:center;justify-content:center}
+.steps>li>b:first-child{font-family:var(--head);color:var(--purple-deep)}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}
+@media (max-width:700px){.cmp{grid-template-columns:1fr}}
+.card{border:1.5px solid var(--purple-line);border-radius:var(--r-m);padding:14px 16px}
+.card h3{margin:0 0 6px}
+.mini{font-size:13.5px}
+.mini td,.mini th{padding:5px 8px}
+.screen{display:grid;grid-template-columns:2fr 1fr;gap:10px;margin:12px 0;font-size:14px}
+.screen div{border-radius:10px;padding:10px 12px;background:var(--paper);border:1.5px dashed var(--purple-line)}
+.screen .side{background:var(--purple-deep);color:#fff;border:0}
+.screen .n{display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--orange);color:#fff;font-weight:700;font-size:12.5px;align-items:center;justify-content:center;margin-right:6px}
+.screen .stack{display:flex;flex-direction:column;gap:10px;padding:0;border:0;background:none}
+.find{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 4px}
+.find input{border:1.5px solid var(--purple-line);border-radius:var(--r-s);padding:8px 12px;min-width:260px;font:inherit}
+.find .seg{display:inline-flex;background:var(--purple-soft);border-radius:999px;padding:3px}
+.find .seg button{border:0;background:none;padding:5px 14px;border-radius:999px;font:inherit;font-weight:700;color:var(--purple);cursor:pointer}
+.find .seg button[aria-pressed=true]{background:var(--purple);color:#fff}
+.raw{font-family:Consolas,monospace;font-size:13px;color:var(--muted)}
+.star{color:var(--orange);font-weight:700}
+.muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="bar"><div class="bar-in"><div class="mark">Bulk<b>Ex</b> · Hướng dẫn</div><a href="BulkEx.html">← Quay lại BulkEx</a></div></div>
+
+<div class="wrap">
+<nav class="toc" aria-label="Mục lục">
+  <p>Mục lục</p>
+  <a href="#tong-quan">Trang trông như thế nào</a>
+  <a href="#lan-dau">Lần đầu tiên</a>
+  <a href="#cac-buoc">6 bước lấy dữ liệu</a>
+  <a href="#all-any">all hay any?</a>
+  <a href="#cach-so">Các cách so</a>
+  <a href="#detail-summary">Detail và Summary</a>
+  <a href="#vi-du">Ví dụ hoàn chỉnh</a>
+  <a href="#hoi-dap">Gặp lỗi thì sao</a>
+  <a href="#bang-tra">Bảng tra tên trường</a>
+</nav>
+
+<main>
+<section id="tong-quan">
+  <h1>Lấy dữ liệu xuất nhập khẩu, không cần SQL</h1>
+  <p class="lead">Chọn tháng → đặt điều kiện → chọn cột → bấm <span class="btn-like">Get the file</span>. Vài phút sau có file Excel trong thư mục <b>output</b>.</p>
+  <h3>Trang BulkEx gồm các phần</h3>
+  <div class="screen">
+    <div class="stack">
+      <div><span class="n">1</span><b>Data</b> – bảng Export / Import và các tháng</div>
+      <div><span class="n">2</span><b>Filters</b> – điều kiện lọc: mã HS, nước, công ty…</div>
+      <div><span class="n">3</span><b>Result</b> – nhận danh sách (Detail) hay bảng tổng hợp (Summary), chọn cột</div>
+    </div>
+    <div class="stack">
+      <div class="side"><span class="n">5</span><b>Your request</b> – đặt tên, kiểm tra, gửi</div>
+      <div><span class="n">4</span><b>My presets</b> – mẫu đã lưu</div>
+      <div><span class="n">6</span><b>Recent requests</b> – trạng thái, mở file</div>
+    </div>
+  </div>
+</section>
+
+<section id="lan-dau">
+  <h2>Lần đầu tiên (chỉ làm 1 lần)</h2>
+  <ol class="steps">
+    <li><b>Mở trang.</b> Vào thư mục <b>BulkEx</b> trên OneDrive, nháy đúp <code>BulkEx.html</code>. Dùng <b>Chrome</b> hoặc <b>Edge</b>.</li>
+    <li><b>Chỉ cho trang biết thư mục.</b> Ở khung tím bên phải bấm <span class="ui">Choose BulkEx folder</span> → chọn thư mục <b>BulkEx</b> (thư mục có <code>input</code> và <code>output</code> bên trong) → bấm <b>Allow / Cho phép</b>.
+      <br><span class="ok">Đúng:</span> khung hiện “✓ Requests go straight to the BulkEx folder”.
+      <br><span class="bad">Sai:</span> báo “Pick the BulkEx folder…” → bạn đang chọn nhầm thư mục con, chọn lại thư mục cha.</li>
+    <li><b>Gõ tên bạn</b> vào ô <span class="ui">Requested by</span>. Trang nhớ tên này cho các lần sau.</li>
+  </ol>
+</section>
+
+<section id="cac-buoc">
+  <h2>6 bước mỗi lần lấy dữ liệu</h2>
+  <ol class="steps">
+    <li><b>Data – bảng nào, tháng nào.</b>
+      <ul>
+        <li><span class="ui">Export</span> = tờ khai xuất khẩu · <span class="ui">Import</span> = tờ khai nhập khẩu · <span class="ui">Export + Import</span> = cả hai.</li>
+        <li>Bấm ô tháng để chọn (ô cam = đã chọn). Bấm <b>số năm</b> để chọn cả năm. <span class="ui">Quick pick</span> chọn nhanh 3 / 6 / 9 / 12 tháng gần nhất.</li>
+        <li>Ô tháng mờ = tháng đó chưa có dữ liệu.</li>
+      </ul></li>
+    <li><b>Filters – chỉ lấy dòng nào.</b>
+      <ul>
+        <li>Bấm <span class="ui">+ Add condition</span> → chọn trường (vd <i>HS Code</i>) → chọn cách so (xem <a href="#cach-so">bảng bên dưới</a>) → gõ giá trị, nhấn <b>Enter</b> sau mỗi giá trị.</li>
+        <li>Có sẵn danh sách trong Excel? Copy cả cột rồi <b>dán</b> vào ô giá trị: mỗi ô thành một giá trị.</li>
+        <li>Một điều kiện có nhiều giá trị = dòng khớp <b>bất kỳ</b> giá trị nào (VN <i>hoặc</i> IN).</li>
+        <li>Chọn Export + Import thì mỗi bảng có <b>tab bộ lọc riêng</b>; nút <span class="ui">Copy to …</span> chép bộ lọc sang bảng kia.</li>
+        <li>Không thêm điều kiện nào = lấy hết mọi dòng của các tháng đã chọn.</li>
+      </ul></li>
+    <li><b>Result – nhận gì.</b>
+      <ul>
+        <li>Tick <span class="ui">Detail rows</span> để có danh sách từng dòng hàng; tick <span class="ui">Summary</span> để có bảng tổng hợp; tick cả hai được. <a href="#detail-summary">Khác nhau thế nào?</a></li>
+        <li>Detail: chọn cột bằng <span class="ui">Essentials</span> (bộ cột hay dùng), <span class="ui">All columns</span>, hoặc <span class="ui">Add a column…</span>. Trường đã dùng để lọc tự có trong file.</li>
+        <li>File luôn có thêm 2 cột đầu <b>Year</b>, <b>Month</b>: dòng đó thuộc tháng nào.</li>
+      </ul></li>
+    <li><b>My presets – lưu để dùng lại</b> <span class="muted">(không bắt buộc)</span>.
+      <ul>
+        <li><span class="ui">Save as new</span> lưu cả yêu cầu (tháng, bộ lọc, cột) dưới một cái tên; lần sau chọn tên đó là có lại y nguyên.</li>
+        <li>Mẫu lưu trong trình duyệt trên máy bạn. <span class="ui">Back up</span> để giữ một bản, <span class="ui">Restore</span> để nạp lại hoặc chuyển sang máy khác.</li>
+      </ul></li>
+    <li><b>Your request – đặt tên và gửi.</b>
+      <ul>
+        <li><span class="ui">Request name</span>: tên dễ nhớ, vd <i>Pharma 3002 sang Ấn Độ 2025</i>. Bắt buộc.</li>
+        <li><b>Đọc câu tóm tắt màu trắng</b> trong khung tím: đó chính là điều bạn đang xin. Thấy chữ <b>or</b> ở chỗ bạn muốn <b>and</b> → quay lại bước 2.</li>
+        <li>Bấm <span class="ui">Check row count</span> trước: chỉ đếm số dòng, không làm file. Số quá lớn hoặc bằng 0 → sửa bộ lọc.</li>
+        <li>Ổn rồi thì bấm <span class="btn-like">Get the file</span>.</li>
+      </ul></li>
+    <li><b>Recent requests – chờ và mở kết quả.</b>
+      <ul>
+        <li>Trạng thái: <b>sent, waiting for the runner</b> (đã gửi) → <b>running</b> (đang chạy) → <span class="ok">ready</span> (xong) hoặc <span class="bad">couldn't run</span> (lỗi, có ghi lý do).</li>
+        <li>Thường 2–5 phút; yêu cầu nhiều năm, hàng trăm nghìn dòng có thể 10–15 phút.</li>
+        <li>Xong thì bấm <span class="ui">Open file</span> (hoặc <span class="ui">Open CSV</span>). File nằm trong thư mục <b>output</b>.</li>
+        <li>Tab <span class="ui">Done</span> / <span class="ui">Failed</span> tách việc xong và việc lỗi. <span class="ui">Only mine</span> / <span class="ui">Show everyone</span>: xem của riêng bạn hay cả nhóm.</li>
+        <li><span class="ui">Use again</span> nạp lại yêu cầu cũ vào trang để sửa rồi gửi lại (chỉ có với yêu cầu gửi từ chính máy bạn).</li>
+      </ul></li>
+  </ol>
+</section>
+
+<section id="all-any">
+  <h2>“Keep rows that match all / any” – quan trọng nhất</h2>
+  <div class="cmp">
+    <div class="card"><h3>all <span class="ok">(nên dùng)</span></h3>
+      Dòng phải khớp <b>tất cả</b> điều kiện.<br><i>HS 3002 <b>và</b> gửi từ Ấn Độ</i> → chỉ hàng 3002 từ Ấn Độ.</div>
+    <div class="card"><h3>any <span class="bad">(cẩn thận)</span></h3>
+      Khớp <b>một</b> điều kiện là đủ.<br><i>HS 3002 <b>hoặc</b> gửi từ Ấn Độ</i> → mọi lô 3002 từ mọi nước <b>cộng</b> mọi lô hàng bất kỳ từ Ấn Độ.</div>
+  </div>
+  <div class="warn"><b>Chọn “any” thường ra rất nhiều dòng</b>, dễ chạy quá 15 phút và bị dừng. Trang hiện cảnh báo màu cam khi bạn chọn any.</div>
+  <div class="tip"><b>Cần “hoặc” cho một phần thôi?</b> Giữ <b>all</b> và dùng <span class="ui">+ Add group (either / or)</span>.
+    Ví dụ: <i>HS 3002</i> <b>và</b> nhóm (<i>gửi từ IN</i> <b>hoặc</b> <i>gửi từ VN</i>).
+    Với ví dụ này còn đơn giản hơn: một điều kiện <i>Shipped From Country Code · is · IN, VN</i>.</div>
+</section>
+
+<section id="cach-so">
+  <h2>Các cách so (ô thứ hai của mỗi điều kiện)</h2>
+  <div class="tbl"><table>
+    <tr><th>Trên trang</th><th>Nghĩa</th><th>Dùng cho</th></tr>
+    <tr><td><b>is</b></td><td>đúng bằng một trong các giá trị</td><td>mã nước (<code>IN</code>, <code>VN</code>), mã đơn vị, phương thức vận chuyển</td></tr>
+    <tr><td><b>is not</b></td><td>khác tất cả các giá trị</td><td>loại trừ vài nước</td></tr>
+    <tr><td><b>starts with</b></td><td>bắt đầu bằng</td><td><b>mã HS</b>: gõ <code>3002</code> là lấy mọi mã 3002xxxx · mã số thuế</td></tr>
+    <tr><td><b>contains</b></td><td>có chứa ở bất kỳ đâu</td><td>tên công ty, mô tả hàng</td></tr>
+    <tr><td><b>doesn't start with / doesn't contain</b></td><td>ngược lại hai cái trên</td><td>loại bỏ</td></tr>
+    <tr><td><b>ends with</b></td><td>kết thúc bằng</td><td>ít dùng</td></tr>
+    <tr><td><b>has exactly … characters</b></td><td>đúng số ký tự</td><td>chỉ lấy mã HS đủ 8 số</td></tr>
+    <tr><td><b>is empty / is not empty</b></td><td>ô trống / có dữ liệu</td><td></td></tr>
+    <tr><td><b>is between / is more than / is at least / is less than / is at most</b></td><td>so sánh số</td><td>trị giá, số lượng, trọng lượng</td></tr>
+  </table></div>
+  <p class="muted">Chữ hoa hay thường đều được: <code>in</code> = <code>IN</code>.</p>
+</section>
+
+<section id="detail-summary">
+  <h2>Detail và Summary khác gì?</h2>
+  <div class="cmp">
+    <div class="card"><h3>Detail rows = danh sách</h3>
+      <ul><li>Mỗi dòng trong file = <b>một dòng hàng</b> trên tờ khai.</li>
+        <li>Bạn chọn <b>các cột</b> muốn xem.</li>
+        <li>Có thể rất nhiều dòng.</li>
+        <li>Dùng khi cần soi chi tiết, lọc tiếp trong Excel.</li></ul></div>
+    <div class="card"><h3>Summary = bảng tổng hợp</h3>
+      <ul><li>Gom các dòng giống nhau thành <b>một dòng</b>, rồi đếm và cộng tổng.</li>
+        <li>Bạn chọn <b>gom theo gì</b> và <b>cộng cột số nào</b>.</li>
+        <li>Ít dòng, gọn.</li>
+        <li>Dùng khi cần trả lời nhanh “ai nhập nhiều nhất”, “nước nào lớn nhất”.</li></ul></div>
+  </div>
+  <h3>Summary có 3 ô</h3>
+  <ol>
+    <li><span class="ui">One row for each</span> – <b>gom theo trường nào</b>. Chọn <i>Importer Name</i> → mỗi nhà nhập khẩu một dòng. Chọn <i>Importer Name</i> + <i>HS Code</i> → mỗi cặp (nhà nhập khẩu, mã HS) một dòng. Thường <b>1–2 trường</b> là đủ.</li>
+    <li><span class="ui">Add up</span> – <b>cột số cần cộng tổng</b>: <i>Invoice Value</i>, <i>Quantity 1</i>, <i>Total Gross Weight</i>… Cột <b>Records</b> (số dòng) luôn có sẵn.</li>
+    <li><span class="ui">Keep only the top</span> – chỉ giữ N dòng lớn nhất (nhiều Records nhất). Để trống = lấy hết.</li>
+  </ol>
+  <p>Ví dụ: <i>One row for each</i> = <b>Importer Name</b>, <i>Add up</i> = <b>Invoice Value</b>, top <b>20</b> → sheet Summary:</p>
+  <div class="tbl"><table class="mini" style="max-width:520px">
+    <tr><th>Importer Name</th><th>Records</th><th>Total Invoice Value</th></tr>
+    <tr><td>Công ty A</td><td>312</td><td>1,250,000</td></tr>
+    <tr><td>Công ty B</td><td>205</td><td>980,000</td></tr>
+    <tr><td class="muted">… 20 dòng</td><td></td><td></td></tr>
+  </table></div>
+  <div class="tip">Summary dùng <b>cùng tháng và cùng bộ lọc</b> với Detail, và gộp tất cả các tháng đã chọn lại với nhau. Tick cả hai → một file Excel có cả sheet Detail và sheet Summary.</div>
+</section>
+
+<section id="vi-du">
+  <h2>Ví dụ hoàn chỉnh</h2>
+  <p><i>“Danh sách nhập khẩu hàng mã HS 3002 và 3004 gửi từ Ấn Độ, năm 2025, kèm bảng tổng hợp theo nhà nhập khẩu.”</i></p>
+  <div class="tbl"><table>
+    <tr><th style="width:120px">Phần</th><th>Làm gì</th></tr>
+    <tr><td>1 · Data</td><td>Bấm <span class="ui">Import</span> → bấm số năm <b>2025</b></td></tr>
+    <tr><td>2 · Filters</td><td>Để <b>all</b>.<br>Điều kiện 1: <i>HS Code</i> · <b>starts with</b> · <code>3002</code> Enter <code>3004</code> Enter<br>Điều kiện 2: <i>Shipped From Country Code</i> · <b>is</b> · <code>IN</code> Enter</td></tr>
+    <tr><td>3 · Result</td><td>Tick <span class="ui">Detail rows</span> → <span class="ui">Essentials</span>.<br>Tick <span class="ui">Summary</span> → <i>One row for each</i> = <b>Importer Name</b>, <i>Add up</i> = <b>Invoice Value</b>, top <b>20</b></td></tr>
+    <tr><td>5 · Gửi</td><td>Request name <code>3002-3004 tu IN 2025</code> → <span class="ui">Check row count</span> → số dòng hợp lý → <span class="btn-like">Get the file</span></td></tr>
+    <tr><td>6 · Nhận</td><td>Chờ chữ xanh <span class="ok">ready</span> → <span class="ui">Open file</span></td></tr>
+  </table></div>
+</section>
+
+<section id="hoi-dap">
+  <h2>Gặp lỗi thì sao?</h2>
+  <div class="tbl"><table>
+    <tr><th>Bạn thấy</th><th>Nghĩa là</th><th>Làm gì</th></tr>
+    <tr><td>Nút <b>Get the file</b> mờ</td><td>Thiếu thông tin</td><td>Đọc dòng có chấm cam trong khung tím: thường thiếu <i>Request name</i>, <i>Requested by</i> hoặc chưa chọn tháng</td></tr>
+    <tr><td>Nằm mãi ở <b>sent, waiting for the runner</b></td><td>Máy chạy dữ liệu chưa nhận được yêu cầu</td><td>Đợi 5 phút. Vẫn vậy → báo admin (máy có thể đang tắt hoặc OneDrive chưa đồng bộ)</td></tr>
+    <tr><td><span class="bad">couldn't run</span> – <i>took longer than 15 minutes</i></td><td>Yêu cầu quá lớn</td><td>Chọn ít tháng hơn, thêm điều kiện, kiểm tra đang để <b>all</b> chứ không phải <b>any</b></td></tr>
+    <tr><td><span class="bad">couldn't run</span> – <i>no data for the chosen months</i></td><td>Tháng đó chưa có dữ liệu</td><td>Chọn tháng khác</td></tr>
+    <tr><td>Ra <b>0 rows</b></td><td>Bộ lọc quá chặt hoặc gõ sai</td><td>Mã HS dùng <b>starts with</b>; tên công ty dùng <b>contains</b>; mã nước dùng <b>is</b> với mã 2 chữ</td></tr>
+    <tr><td>Lọc nước rồi mà vẫn thấy nước khác</td><td>Đang nhìn nhầm cột</td><td>Import có 2 cột nước: <i>Shipped From Country Code</i> (nước gửi hàng) và <i>Country of Origin Code</i> (nước sản xuất). Xem bảng tra bên dưới</td></tr>
+    <tr><td>Nhận file <b>CSV</b> thay vì Excel</td><td>Kết quả trên 3 triệu dòng</td><td>CSV mở bằng Excel bình thường. Muốn Excel thì lọc hẹp lại</td></tr>
+    <tr><td>Thấy yêu cầu của người khác</td><td>Danh sách dùng chung cả nhóm</td><td>Bấm <span class="ui">Only mine</span></td></tr>
+  </table></div>
+</section>
+
+<section id="bang-tra">
+  <h2>Bảng tra tên trường</h2>
+  <p>Tên trên trang là tiếng Anh; bảng này cho biết từng trường là gì. <span class="star">★</span> = có trong bộ cột <b>Essentials</b>.</p>
+  <div class="find">
+    <input id="q" type="search" placeholder="Tìm: HS, nước, thuế, importer…" aria-label="Tìm trường">
+    <span class="seg" role="group" aria-label="Bảng">
+      <button type="button" data-ds="export" aria-pressed="true">Export</button>
+      <button type="button" data-ds="import" aria-pressed="false">Import</button>
+    </span>
+    <span id="cnt" class="muted"></span>
+  </div>
+  <div class="tbl"><table id="fields"><thead><tr><th>Tên trên trang (English)</th><th>Tiếng Việt</th><th>Tên gốc</th><th>Nhóm</th></tr></thead><tbody></tbody></table></div>
+  <p id="nocat" class="muted" hidden>Chưa đọc được danh sách trường. Mở trang này từ thư mục BulkEx (cùng chỗ với BulkEx.html).</p>
+</section>
+</main>
+</div>
+
+<script>
+(function(){
+  let ds="export";
+  const q=document.getElementById("q"),tb=document.querySelector("#fields tbody"),cnt=document.getElementById("cnt");
+  const fold=s=>String(s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D").toLowerCase();
+  function draw(){
+    const cat=window.BULKEX_CATALOG;
+    if(!cat||!cat.datasets){document.getElementById("nocat").hidden=false;return;}
+    const d=cat.datasets[ds];tb.textContent="";if(!d){cnt.textContent="";return;}
+    const order=cat.group_order||[];const term=fold(q.value.trim());
+    const list=d.fields.slice().sort((a,b)=>(order.indexOf(a.group)+99)%99-(order.indexOf(b.group)+99)%99)
+      .filter(f=>!term||fold([f.label,f.vi,f.key,f.group].join(" ")).includes(term));
+    for(const f of list){
+      const tr=document.createElement("tr");
+      const c=(t,cls)=>{const td=document.createElement("td");if(cls)td.className=cls;td.textContent=t;tr.append(td);return td;};
+      const td=c(f.label);if(f.essential){const s=document.createElement("span");s.className="star";s.textContent=" ★";td.append(s);}
+      c(f.vi||"—");c(f.key,"raw");c(f.group||"");tb.append(tr);}
+    cnt.textContent=list.length+" / "+d.fields.length+" trường";}
+  q.addEventListener("input",draw);
+  document.querySelectorAll(".seg button").forEach(b=>b.addEventListener("click",()=>{
+    ds=b.dataset.ds;document.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));draw();}));
+  const s=document.createElement("script");s.src="_system/catalog.js?t="+Date.now();s.onload=draw;s.onerror=draw;document.body.append(s);
+})();
+</script>
+</body>
+</html>

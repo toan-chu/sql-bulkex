@@ -30,6 +30,8 @@ button,input,select{font:inherit;color:inherit}
 .mark{font-family:var(--head);font-weight:700;font-size:22px;letter-spacing:-.01em}
 .mark b{color:var(--orange);font-weight:700}
 .bar-note{margin-left:auto;font-size:13px;opacity:.85}
+.help-link{color:#fff;font-weight:700;text-decoration:none;border:1.5px solid rgba(255,255,255,.55);border-radius:999px;padding:5px 14px;font-size:13.5px}
+.help-link:hover{background:rgba(255,255,255,.14)}
 .sample{background:var(--orange-soft);color:#7a3200;font-size:13px;text-align:center;padding:6px 16px}
 
 .wrap{max-width:1240px;margin:0 auto;padding:28px 24px 64px;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:32px;align-items:start}
@@ -221,7 +223,7 @@ details.json pre{background:#1d0738;color:#e9ddff;padding:10px;border-radius:var
 </style>
 </head>
 <body>
-<div class="bar"><div class="bar-in"><div class="mark">Bulk<b>Ex</b></div><div class="bar-note" id="catalogNote"></div></div></div>
+<div class="bar"><div class="bar-in"><div class="mark">Bulk<b>Ex</b></div><div class="bar-note" id="catalogNote"></div><a class="help-link" href="Help.html" target="_blank" rel="noopener">Hướng dẫn</a></div></div>
 <div class="sample" id="sampleBanner" hidden>Sample field list for review. Setup will replace it with the fields found in your database.</div>
 <div id="app"></div>
 <div class="admin-note" id="adminNote" hidden></div>

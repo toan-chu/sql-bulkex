@@ -19,6 +19,7 @@ import psycopg2
 import yaml
 
 from .onedrive import keep_workspace
+from .runner import PAGES
 from .catalog import load_defs, scan_values
 from .config import APP_DIR, CONFIG_DIR, ROOT_DIR, Settings, connect, load_yaml
 from .runner import Runner, setup_logging
@@ -201,8 +202,9 @@ def pick_workspace(current, input_func=input, roots=None, downloads=None):
 def make_workspace(ws: Path, app_dir: Path):
     for sub in ("input", "output", "_system"):
         (ws / sub).mkdir(parents=True, exist_ok=True)
-    shutil.copy2(app_dir / "web" / "BulkEx.html", ws / "BulkEx.html")  # always the newest page
-    say(f"   OK  {ws}  (BulkEx.html, input, output, _system)")
+    for page in PAGES:
+        shutil.copy2(app_dir / "web" / page, ws / page)  # always the newest pages
+    say(f"   OK  {ws}  (BulkEx.html, Help.html, input, output, _system)")
     if keep_workspace(ws):  # requests always on this computer, results only in the cloud
         say("   OK  OneDrive: input + _system luôn trên máy; output chỉ giữ trên mây (không đầy ổ)")
 

@@ -31,6 +31,7 @@ from .scan import field_types, scan
 log = logging.getLogger("bulkex")
 STATUS_KEEP = 300  # newest finished requests shown on the page
 LOCK_STALE_SECONDS = 3 * 3600
+PAGES = ("BulkEx.html", "Help.html")  # copied from app/web to the shared folder whenever the repo has a newer version
 
 
 def setup_logging(log_dir: Path):
@@ -431,8 +432,24 @@ class Runner:
             files.append(f)
         return files
 
+    def sync_pages(self):
+        """After a git pull the shared folder gets the new pages by itself: no need to run setup again."""
+        for name in PAGES:
+            src, dst = self.s.app_dir / "web" / name, self.s.workspace / name
+            try:
+                new = src.read_bytes()
+                if dst.exists() and dst.read_bytes() == new:
+                    continue
+                tmp = self.s.system_dir / "tmp" / name
+                tmp.write_bytes(new)
+                tmp.replace(dst)
+                log.info("Updated %s in the shared folder", name)
+            except OSError as e:  # a cloud-only or locked copy: try again next pass
+                log.warning("Could not update %s: %s", name, e)
+
     def run_once(self, settle_seconds=3):
         self.s.ensure_dirs()
+        self.sync_pages()
         status = Status(self.s.system_dir)
         try:
             self.refresh_catalog()

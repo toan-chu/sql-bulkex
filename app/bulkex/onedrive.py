@@ -42,7 +42,8 @@ def keep_workspace(ws: Path, run=subprocess.run, windows=None) -> bool:
     for sub in ("input", "_system"):
         ok = _attrib(["+P", "-U", str(ws / sub)], run) and ok
         ok = _attrib(["+P", "-U", str(ws / sub / "*"), "/S", "/D"], run) and ok
-    ok = _attrib(["+P", "-U", str(ws / "BulkEx.html")], run) and ok
+    for page in ("BulkEx.html", "Help.html"):
+        ok = _attrib(["+P", "-U", str(ws / page)], run) and ok
     ok = free_up(ws / "output", run, windows) and ok
     return ok
 

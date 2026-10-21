@@ -468,3 +468,18 @@ def test_timeout_with_any_filters_says_so(runner, monkeypatch):
     assert rec["state"] == "failed" and 'joined with "any"' in rec["message"]
     rec = submit(runner, request([part("export", ["2025-01"], [cond("ma_nuoc", "is_any_of", "IN")])]))
     assert "Pick fewer months" in rec["message"]
+
+
+def test_pages_are_copied_to_the_shared_folder_after_an_update(runner):
+    runner.s.ensure_dirs()
+    (runner.s.workspace / "BulkEx.html").write_text("old page", encoding="utf-8")
+    runner.run_once(settle_seconds=0)
+    for name in ("BulkEx.html", "Help.html"):
+        assert (runner.s.workspace / name).read_bytes() == (runner.s.app_dir / "web" / name).read_bytes()
+
+
+def test_help_page_gets_vietnamese_names_from_labels(runner):
+    runner.s.ensure_dirs()
+    runner.refresh_catalog()
+    f = {x["key"]: x for x in runner.catalog["datasets"]["export"]["fields"]}
+    assert f["ma_so_hang_hoa"]["vi"].startswith("Mã số hàng hóa")

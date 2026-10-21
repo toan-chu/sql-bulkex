@@ -64,6 +64,8 @@ def build_catalog(found: dict, labels: dict, datasets_def: dict, values: dict | 
                 en = en.get(ds) or next(iter(en.values()), None)
             f = {"key": col, "label": display_name(en, acr) if en else col,
                  "group": info.get("group", "Other"), "type": "number" if types.get(col, "text") != "text" else "text"}
+            if info.get("vi"):
+                f["vi"] = info["vi"]
             if info.get("essential"):
                 f["essential"] = True
             if info.get("default_op"):

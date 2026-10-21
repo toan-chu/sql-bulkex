@@ -4,10 +4,12 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-336791.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6.svg?logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-[![Tests](https://img.shields.io/badge/tests-41%20passed-brightgreen.svg)](tests/v7)
+[![Tests](https://img.shields.io/badge/tests-43%20passed-brightgreen.svg)](tests/v7)
 
 > **Lấy dữ liệu tờ khai xuất nhập khẩu bằng một trang web, không cần biết SQL.**
 > Mở `BulkEx.html` → chọn tháng, điều kiện, cột → bấm **Get the file** → vài phút sau có file Excel trong thư mục chung.
+>
+> 📘 **Người dùng:** bấm nút **Hướng dẫn** trên trang BulkEx để mở `Help.html` — bản hướng dẫn tiếng Việt, có ô tìm tên trường.
 
 **Mục lục:** [Hướng dẫn người dùng](#-hướng-dẫn-người-dùng) · [Detail và Summary khác gì](#-detail-và-summary-khác-gì) · [Bảng tra tên trường](#-bảng-tra-tên-trường) · [Câu hỏi thường gặp](#-câu-hỏi-thường-gặp) · [Phần cho admin](#-phần-cho-admin)
 
@@ -255,7 +257,7 @@ mở BulkEx.html  ── đọc ──────────────▶  _
    - cài lịch chạy nền mỗi 2 phút, gỡ lịch cũ của v6.
 3. Chia sẻ thư mục chung trên OneDrive cho người dùng (quyền **Can edit**).
 
-Cập nhật: Pull code mới rồi chạy lại `CAI-DAT.bat`, ở bước chọn thư mục bấm **Enter** để giữ thư mục đang dùng. Chỉ đổi `app/labels.yaml` thì chỉ cần Pull, runner tự đọc lại.
+Cập nhật: chỉ cần **Pull** code mới trên máy có database. Mỗi lượt (2 phút) runner tự chép `BulkEx.html` và `Help.html` mới ra thư mục chung và đọc lại `app/labels.yaml`. Chạy lại `CAI-DAT.bat` chỉ khi đổi thư mục, đổi mật khẩu hoặc cài máy mới.
 
 ### Hỏng thì làm gì
 
@@ -288,15 +290,16 @@ Các ngưỡng chỉnh trong `config/bulkex.yaml` (`xlsx_max_rows`, `max_rows`, 
 
 ### Đổi tên trường
 
-Tên trên trang lấy từ `app/labels.yaml`: `en` là tên tiếng Anh (viết thường, gạch dưới), `group` là nhóm, `essential: true` đưa vào bộ Essentials, `default_op` là cách so mặc định. Trường có nghĩa khác nhau giữa hai bảng ghi `en: {export: ..., import: ...}`. Sửa xong thì cập nhật luôn bảng tra trong README này.
+Tên trên trang lấy từ `app/labels.yaml`: `en` là tên tiếng Anh (viết thường, gạch dưới), `vi` là tên tiếng Việt hiện ở trang Help, `group` là nhóm, `essential: true` đưa vào bộ Essentials, `default_op` là cách so mặc định. Trường có nghĩa khác nhau giữa hai bảng ghi `en: {export: ..., import: ...}`. Sửa xong thì cập nhật luôn bảng tra trong README này.
 
 ### Cấu trúc
 
 ```text
 CAI-DAT.bat            trình cài đặt (nháy đúp)
-app/web/BulkEx.html    trang người dùng (bản gốc; setup chép ra thư mục chung)
+app/web/BulkEx.html    trang người dùng (bản gốc; runner tự chép ra thư mục chung)
+app/web/Help.html      trang hướng dẫn tiếng Việt (bảng tra tên trường đọc từ catalog)
 app/bulkex/            runner: scan, catalog, query, runner, setup, onedrive
-app/labels.yaml        tên tiếng Anh, nhóm, cột Essentials, cách so sánh mặc định
+app/labels.yaml        tên tiếng Anh, tên tiếng Việt (vi), nhóm, cột Essentials, cách so sánh mặc định
 app/datasets.yaml      cách nhận bảng Export / Import, cột số lưu dạng chữ
 config/                cấu hình riêng máy (mật khẩu, kết nối) - không lên Git
 tests/v7/              phép thử (cần PostgreSQL: đặt BULKEX_TEST_PG)
