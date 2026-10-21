@@ -205,6 +205,8 @@ aside{position:sticky;top:20px;display:flex;flex-direction:column;gap:20px}
 .st-bad{color:var(--bad);font-weight:700}
 .req-head{display:flex;align-items:flex-start;gap:6px}
 .req-head .req-name{flex:1}
+.any-warn{margin:4px 0 8px;font-size:13px;color:#b45309;font-weight:600}
+.joiner.or{color:#b45309}
 .req-x{width:24px;height:24px;font-size:15px;margin-top:-2px;opacity:.55}
 .req:hover .req-x,.req-x:focus-visible{opacity:1}
 .tpl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -521,11 +523,13 @@ function groupView(g,isRoot,ds,root){
   const box=h("div",{class:"group"+(isRoot?" root":"")});
   if(isRoot){
     if(g.items.length)box.append(h("div",{class:"group-head"},"Keep rows that match",matchSelect(g),"of these:"));
+    if(g.match==="any"&&g.items.length>1)box.append(h("p",{class:"any-warn",
+      text:"⚠ With \"any\", a row is kept when it fits just one of these conditions, so the result can be huge. Choose \"all\" to keep only rows that fit every condition."}));
     else box.append(h("p",{class:"empty-filters",text:"No filters yet — every row in the chosen months is included. Add a condition to narrow it down."}));
   }else box.append(h("div",{class:"group-head"},"Group: match",matchSelect(g),"of these",
     h("button",{type:"button",class:"link",style:"margin-left:auto",onclick:()=>{root.items=root.items.filter(i=>i!==g);filtersChanged();}},"Remove group")));
   g.items.forEach((it,i)=>{
-    if(i>0)box.append(h("div",{class:"joiner"},g.match==="all"?"and":"or"));
+    if(i>0)box.append(h("div",{class:"joiner"+(g.match==="all"?"":" or")},g.match==="all"?"and":"or"));
     box.append(it.kind==="group"?groupView(it,false,ds,root):condView(it,g,root,ds));});
   box.append(h("div",{class:"adders"},
     h("button",{type:"button",class:"link",onclick:()=>{g.items.push(newCond());filtersChanged();

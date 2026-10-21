@@ -477,8 +477,12 @@ class Runner:
                 self._finish(f, status, rec, "failed")
                 log.info("Refused %s: %s", f.name, e)
             except psycopg2.errors.QueryCanceled:
-                rec.update(state="failed", message=f"This request took longer than {self.s.query_timeout_minutes} minutes and was stopped. "
-                                                   "Pick fewer months or add a filter.")
+                hint = "Pick fewer months or add a filter."
+                if any(p.get("filter", {}).get("match") == "any" and len(p["filter"].get("items") or []) > 1
+                       for p in req.get("parts") or []):
+                    hint = ('Your filters are joined with "any", so a row only had to fit one of them. '
+                            'Did you mean "all"? Use Check row count first to see the size.')
+                rec.update(state="failed", message=f"This request took longer than {self.s.query_timeout_minutes} minutes and was stopped. " + hint)
                 self._finish(f, status, rec, "failed")
                 log.warning("Timeout %s", f.name)
             except psycopg2.OperationalError as e:

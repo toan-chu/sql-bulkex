@@ -457,3 +457,14 @@ def test_same_column_can_have_a_different_name_per_data_set():
     cat = build_catalog({"export": [tbl], "import": [tbl]}, labels, defs)
     names = {ds: cat["datasets"][ds]["fields"][0]["label"] for ds in ("export", "import")}
     assert names == {"export": "Destination Country Code", "import": "Shipped From Country Code"}
+
+
+def test_timeout_with_any_filters_says_so(runner, monkeypatch):
+    def slow(*a, **k):
+        raise psycopg2.errors.QueryCanceled("canceling statement due to statement timeout")
+    monkeypatch.setattr(runner, "count_part", slow)
+    rec = submit(runner, request([part("export", ["2025-01"], [cond("ma_nuoc", "is_any_of", "IN"),
+                                                              cond("so_to_khai", "is_any_of", "TK1")], match="any")]))
+    assert rec["state"] == "failed" and 'joined with "any"' in rec["message"]
+    rec = submit(runner, request([part("export", ["2025-01"], [cond("ma_nuoc", "is_any_of", "IN")])]))
+    assert "Pick fewer months" in rec["message"]

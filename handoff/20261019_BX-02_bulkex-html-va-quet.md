@@ -143,6 +143,9 @@ Vòng 14 (2026-10-20 16:19): 'lọc Country Code VN, IN vẫn ra nước khác'.
 nước lạ nằm ở cột Country of Origin Code của Import. Gốc rễ là tên gây nhầm: ma_nuoc là nước bên kia giao dịch, khác nghĩa giữa 2 bảng.
 Sửa (Chairman duyệt): labels.yaml cho phép en theo từng bảng; ma_nuoc = Destination Country Code (Export) / Shipped From Country Code (Import).
 40/40 đạt. Nghĩa của ma_nuoc suy từ dữ liệu, chưa đối chiếu tài liệu hải quan.
+Vòng 15 (2026-10-21): 2 yêu cầu VN-IN Pharma fail do quá 15 phút. Nguyên nhân: bảng Export đổi bộ lọc từ 'all' sang 'any' -> 3 năm
+mọi lô đi máy bay + mọi lô đi Ấn Độ. Không phải lỗi code. Cải tiến: trang hiện cảnh báo cam khi chọn 'any' (chữ 'or' cũng màu cam);
+thông báo hết giờ nói rõ bộ lọc đang 'any' và gợi ý Check row count. 41/41 đạt.
 `[RUNTIME CHƯA KIỂM]`: CAI-DAT.bat, Task Scheduler, os.startfile, ghi thẳng thư mục từ trang - chỉ Windows phán được.
 
 ## HISTORY
